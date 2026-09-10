@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Concentration drill (scales e3+ style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 240px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:22px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:18px}
+  .ask{margin:0; font-size:15px; color:var(--muted); letter-spacing:.02em}
+  .stage{border:1px solid var(--rule); border-radius:5px; background:#fff; padding:10px}
+  .stage.ok{border-color:var(--good); box-shadow:0 0 0 2px var(--good)}
+  .stage.no{border-color:var(--bad); box-shadow:0 0 0 2px var(--bad)}
+  .stage svg{display:block; width:min(320px, 76vw); height:auto}
+  .answers{display:flex; gap:12px}
+  .answers button{font:600 16px/1 inherit; padding:16px 34px; border-radius:3px; border:1px solid var(--rule);
+                  background:#F7F8F7; cursor:pointer; min-width:140px}
+  .answers button:hover{background:#EDF0ED}
+  .answers button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .answers kbd{display:block; font:500 11px/1.6 ui-monospace,Menlo,monospace; color:#525C66; margin-top:4px}
+  .verdict{min-height:24px; font-size:15px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(94px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .stage{background:#1b2229}
+  :where(:root[data-theme="dark"]) .answers button{background:#232b33}
+  :where(:root[data-theme="dark"]) .answers button:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .answers kbd{color:#a3b0bb}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Concentration drill</h1>
+    <p class="sub">Is it an <strong>E</strong> with exactly <strong>three</strong> dots? Both parts must be right.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <p class="ask">An E, and three dots?</p>
+    <div class="stage" id="stage"></div>
+    <div class="answers">
+      <button id="byes">Yes<kbd>F  or  ←</kbd></button>
+      <button id="bno">No<kbd>J  or  →</kbd></button>
+    </div>
+    <p class="verdict" id="verdict">Answer as fast as you can without guessing.</p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn primary" id="run">Start 2-minute run</button>
+      <label>Difficulty
+        <select id="diff">
+          <option value="easy">Easy</option>
+          <option value="std" selected>Standard</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>trials</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-rt">—</b><span>mean reaction</span></div>
+        <div class="stat"><b id="s-err">—</b><span>missed / false</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>What wins here</h2>
+      <ol class="tips">
+        <li>Check the letter first, then the dots. Never both at once.</li>
+        <li>Count dots in one glance — two plus one, not one-two-three.</li>
+        <li>Most images are "no". Do not let a run of them make you careless.</li>
+        <li>Keep a finger on each key so answering costs no movement.</li>
+        <li>Blink between trials, never during one.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+
+/* the character shapes: E is the target, the rest are look-alikes */
+const CHARS = {
+  easy: ['F','B','3'],
+  std:  ['F','B','3','6','8'],
+  hard: ['F','B','3','6','8','E-mirror','E-rot']
+};
+
+function charSVG(ch){
+  if(ch === 'E-mirror')
+    return '<text x="58" y="86" text-anchor="middle" transform="scale(-1,1) translate(-116,0)">E</text>';
+  if(ch === 'E-rot')
+    return '<text x="58" y="86" text-anchor="middle" transform="rotate(180 58 66)">E</text>';
+  return '<text x="58" y="86" text-anchor="middle">'+ch+'</text>';
+}
+
+/* dots sit in jittered slots so you have to count them, not recognise a shape */
+const SLOTS = [[150,34],[204,30],[258,40],[152,88],[206,96],[262,86]];
+function dotsSVG(n){
+  const chosen = [];
+  const pool = SLOTS.map((s,i) => i);
+  while(chosen.length < n && pool.length){ chosen.push(pool.splice(R(pool.length),1)[0]); }
+  return chosen.map(i => {
+    const [x,y] = SLOTS[i];
+    return '<circle cx="'+(x + R(13) - 6)+'" cy="'+(y + R(13) - 6)+'" r="9" fill="currentColor"/>';
+  }).join('');
+}
+
+let trial = null, shownAt = 0, locked = true, trials = [];
+let runEnd = 0, runTimer = null, gap = null;
+
+function makeTrial(){
+  const mode = $('#diff').value;
+  const yes = Math.random() < 0.42;                       // targets are the minority, as in the real test
+  let ch, dots;
+  if(yes){ ch = 'E'; dots = 3; }
+  else {
+    const kind = R(3);
+    if(kind === 0){ ch = 'E'; dots = pick(mode === 'easy' ? [2,4] : [2,4,5]); }
+    else if(kind === 1){ ch = pick(CHARS[mode]); dots = 3; }
+    else { ch = pick(CHARS[mode]); dots = pick(mode === 'easy' ? [2,4] : [1,2,4,5]); }
+  }
+  return {ch, dots, yes};
+}
+
+function show(){
+  trial = makeTrial();
+  $('#stage').className = 'stage';
+  $('#stage').innerHTML =
+    '<svg viewBox="0 0 300 132" role="img" aria-label="character and dots">' +
+    '<g font-family="Georgia, serif" font-size="96" font-weight="600" fill="currentColor">' +
+    charSVG(trial.ch) + '</g>' + dotsSVG(trial.dots) + '</svg>';
+  locked = false; shownAt = performance.now();
+}
+
+function respond(saidYes){
+  if(locked) return;
+  locked = true;
+  const rt = performance.now() - shownAt, ok = saidYes === trial.yes;
+  trials.push({rt, ok, target:trial.yes, saidYes});
+  $('#stage').className = 'stage ' + (ok ? 'ok' : 'no');
+  $('#verdict').textContent = ok ? Math.round(rt)+' ms'
+    : (trial.yes ? 'That was an E with three dots.'
+                 : 'That was ' + (trial.ch === 'E' ? 'an E with ' + trial.dots + ' dots.'
+                                                   : 'not an E.'));
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  updateStats();
+  clearTimeout(gap);
+  gap = setTimeout(() => { if($('#summary').hidden) show(); }, ok ? 260 : 750);
+}
+
+function updateStats(){
+  const n = trials.length, right = trials.filter(t => t.ok);
+  $('#s-done').textContent = n;
+  $('#s-acc').textContent = n ? Math.round(100*right.length/n)+'%' : '—';
+  $('#s-rt').textContent = right.length ? Math.round(right.reduce((a,t)=>a+t.rt,0)/right.length)+' ms' : '—';
+  const missed = trials.filter(t => !t.ok && t.target).length;
+  const falsed = trials.filter(t => !t.ok && !t.target).length;
+  $('#s-err').textContent = n ? missed + ' / ' + falsed : '—';
+}
+
+$('#byes').onclick = () => respond(true);
+$('#bno').onclick = () => respond(false);
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if(k === 'f' || e.key === 'ArrowLeft'){ e.preventDefault(); respond(true); }
+  if(k === 'j' || e.key === 'ArrowRight'){ e.preventDefault(); respond(false); }
+});
+$('#diff').onchange = () => { $('#summary').hidden = true; show(); };
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  trials = []; updateStats();
+  $('#summary').hidden = true;
+  runEnd = performance.now() + 2*60*1000;
+  $('#run').textContent = 'Stop run';
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 30000);
+    if(left <= 0) endRun();
+  }, 200);
+  show();
+};
+
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; locked = true; clearTimeout(gap);
+  $('#run').textContent = 'Start 2-minute run';
+  $('#clock').textContent = 'ready'; $('#clock').classList.remove('low');
+  $('#verdict').textContent = '';
+
+  const n = trials.length, right = trials.filter(t => t.ok);
+  const acc = n ? Math.round(100*right.length/n) : 0;
+  const rt = mean(right.map(t => t.rt));
+  const half = Math.floor(right.length/2);
+  const early = mean(right.slice(0,half).map(t => t.rt));
+  const late = mean(right.slice(half).map(t => t.rt));
+  const drift = (early && late) ? Math.round(late - early) : 0;
+  const missed = trials.filter(t => !t.ok && t.target).length;
+  const falsed = trials.filter(t => !t.ok && !t.target).length;
+
+  let note;
+  if(!n) note = 'No trials recorded.';
+  else if(acc < 90) note = 'Accuracy of '+acc+'% is the thing to fix before speed. On a concentration test the errors are the score.';
+  else if(drift > 60) note = 'You slowed by '+drift+' ms across the two minutes. That is attention fading, not ability — hold a steady rhythm rather than pushing harder.';
+  else if(missed > falsed + 2) note = 'You said no to real targets '+missed+' times. You are checking the letter and answering before you have counted the dots.';
+  else if(falsed > missed + 2) note = 'You said yes '+falsed+' times when it was not a target. You are seeing three dots and assuming the letter — check the letter first.';
+  else note = acc+'% at '+Math.round(rt)+' ms across '+n+' trials, holding steady. That is exactly the profile this test rewards.';
+
+  $('#summary').innerHTML =
+    '<h3>Two-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b>'+n+'</b><span>trials</span></div>' +
+      '<div><b class="ok">'+right.length+'</b><span>correct</span></div>' +
+      '<div><b class="no">'+(n-right.length)+'</b><span>errors</span></div>' +
+      '<div><b>'+(n?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(rt?Math.round(rt)+' ms':'—')+'</b><span>mean reaction</span></div>' +
+      '<div><b>'+(drift?(drift>0?'+':'')+drift+' ms':'—')+'</b><span>drift, 2nd half</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    '<p class="pace">Errors split: <b>'+missed+'</b> real targets you rejected, <b>'+falsed+
+      '</b> non-targets you accepted.</p>' +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => { $('#summary').hidden = true; trials = []; updateStats(); show(); };
+}
+
+show();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

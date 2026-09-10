@@ -1,0 +1,53 @@
+.grid__ask {
+  margin: 0; color: var(--ink-muted); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.grid__level { font: var(--step--1) var(--mono); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+.grid__board {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: var(--space-2);
+  /* Fixed board footprint: the grid must not resize as the ladder changes size,
+     or the eye loses its anchor between trials. */
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+}
+
+.grid__cell {
+  padding: 0; aspect-ratio: 1; min-height: 0;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-sunken); color: var(--ink);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: background-color 90ms ease, box-shadow 90ms ease;
+}
+.grid__cell[disabled] { cursor: default; }
+.grid__cell:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface-sunken));
+  border-color: var(--ink-muted);
+}
+
+.grid__cell.is-lit { background: var(--accent); border-color: var(--accent); }
+.grid__cell.is-chosen { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+/* Review state carries a glyph as well as a colour. */
+.grid__cell.is-hit { background: color-mix(in srgb, var(--good) 26%, var(--surface)); border-color: var(--good); }
+.grid__cell.is-missed { border: 2px dashed var(--good); background: var(--surface); }
+.grid__cell.is-wrong { border: 2px solid var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.grid__glyph { font: 600 1.1rem/1 var(--mono); color: var(--ink-muted); }
+.grid__cell.is-wrong .grid__glyph { color: var(--bad); }
+.grid__cell.is-missed .grid__glyph { color: var(--good); font-size: 1.8rem; }
+
+.grid__breakdown {
+  border-collapse: collapse; margin: 0 0 var(--space-4);
+  font: var(--step--1) var(--mono); font-variant-numeric: tabular-nums;
+}
+.grid__breakdown caption {
+  text-align: left; font-family: var(--font); color: var(--ink-muted);
+  font-size: var(--step--1); margin-bottom: var(--space-2);
+}
+.grid__breakdown th, .grid__breakdown td {
+  padding: var(--space-1) var(--space-3); text-align: right; border-bottom: 1px solid var(--line);
+}
+.grid__breakdown thead th { color: var(--ink-muted); font-weight: 500; }
+.grid__breakdown tbody th { text-align: left; }

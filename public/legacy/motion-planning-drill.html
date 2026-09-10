@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Complex planning drill (motionChallenge style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B; --board:#ECEAE6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 220px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:20px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:14px}
+  .tally{display:flex; gap:22px; font:600 15px/1 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .tally span{color:var(--muted); font-weight:500; font-family:inherit}
+  #board{position:relative; background:var(--board); border-radius:6px; touch-action:manipulation; user-select:none}
+  .sq{position:absolute; border-radius:3px; background:#DEDCD7}
+  .wall{position:absolute; border-radius:3px; background:#6E7378}
+  .target{position:absolute; border-radius:3px; background:#1B2028;
+          display:grid; place-items:center}
+  .target::after{content:''; width:54%; aspect-ratio:1; border-radius:50%;
+          border:3px solid #E13A2D; box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+  /* Arrowheads on the sides the ball could currently arrive from. */
+  .target .entry{position:absolute; width:0; height:0; border:8px solid transparent}
+  .target .entry.from-left  {left:-17px;  top:50%; transform:translateY(-50%); border-left-color:#E13A2D}
+  .target .entry.from-right {right:-17px; top:50%; transform:translateY(-50%); border-right-color:#E13A2D}
+  .target .entry.from-above {top:-17px;  left:50%; transform:translateX(-50%); border-top-color:#E13A2D}
+  .target .entry.from-below {bottom:-17px;left:50%; transform:translateX(-50%); border-bottom-color:#E13A2D}
+  /* No approach works yet: nothing would stop the ball on the square. */
+  .target.dead::after{border-style:dashed; opacity:.55}
+  .ball{z-index:2}
+  /* Once the ball is home the ring would only clutter the square. */
+  .board.solved .target::after{display:none}
+  .pc{position:absolute; border-radius:5px; cursor:pointer; transition:left .13s ease, top .13s ease}
+  .pc.sel{outline:3px solid var(--blue); outline-offset:2px}
+  .pc.flash{outline:3px solid #EF9F27; outline-offset:2px}
+  .ball{position:absolute; border-radius:50%; background:#E13A2D; cursor:pointer; transition:left .13s ease, top .13s ease}
+  .ball.sel{outline:3px solid var(--blue); outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){ .pc,.ball{transition:none} }
+  .verdict{min-height:24px; font-size:15px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  #plan{width:100%; max-width:520px; background:#F2F5F8; border:1px solid #D5DFE8; border-radius:4px; padding:12px 16px}
+  #plan h4{margin:0 0 8px; font-size:13px; font-weight:650; color:var(--muted)}
+  #plan ol{margin:0; padding-left:20px; font-size:14.5px}
+  #plan li{margin-bottom:6px} #plan li:last-child{margin-bottom:0}
+  #plan .why{font-size:14.5px; margin:0 0 10px}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn[disabled]{opacity:.45; cursor:default}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(94px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80; --board:#2a323a}
+  :where(:root[data-theme="dark"]) .sq{background:#2a323a}
+  :where(:root[data-theme="dark"]) .wall{background:#a3b0bb}
+  :where(:root[data-theme="dark"]) #plan{background:#1d2833; border:1px solid #33414f}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Complex planning drill</h1>
+    <p class="sub">Slide the blocks aside and get the red ball onto the black square, in as few moves as you can.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <div class="tally">
+      <div><span>moves</span> <b id="moves">0</b></div>
+      <div><span>best possible</span> <b id="best">–</b></div>
+      <div><span>level</span> <b id="level">1</b></div>
+    </div>
+    <div id="board"></div>
+    <p class="verdict" id="verdict">Get the red ball to the ringed square. Click a piece, then click where you want it to go.</p>
+    <section id="plan" hidden></section>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn" id="reset">Reset</button>
+      <button class="btn" id="hint">Hint</button>
+      <button class="btn" id="walk">Walk me through it</button>
+      <button class="btn" id="skip">Skip</button>
+      <button class="btn primary" id="run">Start 6-minute run</button>
+      <label>Difficulty
+        <select id="diff">
+          <option value="easy" selected>Easy</option>
+          <option value="std">Standard</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-solved">0</b><span>solved</span></div>
+        <div class="stat"><b id="s-skip">0</b><span>skipped</span></div>
+        <div class="stat"><b id="s-waste">—</b><span>moves over best</span></div>
+        <div class="stat"><b id="s-time">—</b><span>average time</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>How to attack one</h2>
+      <ol class="tips">
+        <li>Trace the ball's route backwards from the black square first.</li>
+        <li>Only touch blocks sitting on that route. Everything else is a distraction.</li>
+        <li>Biggest blocker first — small pieces have more places to park.</li>
+        <li>Everything slides until it hits something &mdash; the ball too. It only stops on the target if a piece, wall or board edge sits just beyond it.</li>
+        <li>The red arrows show which sides the ball could arrive from right now. No arrows means you must first park a blocker behind the square.</li>
+        <li>Tangled? Reset and replan. It is cheaper than untangling.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const W = 6, H = 6;
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+const $ = s => document.querySelector(s);
+const COLS = ['#4E7FA8','#6E9B5A','#8E6FA8','#C08A4A','#5FA0A0','#A87070'];
+const NAMES = ['blue','green','purple','orange','teal','red-brown'];
+
+/* ---------- puzzle logic ---------- */
+function blocked(pieces, state, walls, skip){
+  const g = Array(W*H).fill(false);
+  walls.forEach(i => g[i] = true);
+  state.forEach(([r,c], i) => {
+    if(i === skip) return;
+    const p = pieces[i];
+    for(let dr=0; dr<p.h; dr++) for(let dc=0; dc<p.w; dc++) g[(r+dr)*W + (c+dc)] = true;
+  });
+  return g;
+}
+function fits(p, r, c, g){
+  if(r < 0 || c < 0 || r+p.h > H || c+p.w > W) return false;
+  for(let dr=0; dr<p.h; dr++) for(let dc=0; dc<p.w; dc++) if(g[(r+dr)*W + (c+dc)]) return false;
+  return true;
+}
+function slide(pieces, state, walls, i, dr, dc){
+  const g = blocked(pieces, state, walls, i);
+  let [r, c] = state[i], steps = 0;
+  while(fits(pieces[i], r+dr, c+dc, g)){ r += dr; c += dc; steps++; }
+  return steps ? [r, c] : null;
+}
+const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+const key = st => st.map(([r,c]) => r*W+c).join(',');
+
+function neighbours(pieces, state, walls){
+  const out = [];
+  for(let i=0;i<pieces.length;i++) for(const [dr,dc] of DIRS){
+    const np = slide(pieces, state, walls, i, dr, dc);
+    if(np){ const s = state.map(x => x.slice()); s[i] = np; out.push({state:s, piece:i, dir:[dr,dc]}); }
+  }
+  return out;
+}
+function solve(pieces, start, walls, target, maxDepth){
+  const goal = st => st[0][0] === target[0] && st[0][1] === target[1];
+  if(goal(start)) return {dist:0, path:[]};
+  const seen = new Map([[key(start), null]]);
+  let frontier = [start], dist = 0;
+  while(frontier.length && seen.size < 120000){
+    dist++;
+    if(dist > maxDepth) return null;
+    const next = [];
+    for(const st of frontier) for(const mv of neighbours(pieces, st, walls)){
+      const k = key(mv.state);
+      if(seen.has(k)) continue;
+      seen.set(k, {from:key(st), mv});
+      if(goal(mv.state)){
+        const path = []; let cur = k;
+        while(seen.get(cur)){ path.unshift(seen.get(cur).mv); cur = seen.get(cur).from; }
+        return {dist, path};
+      }
+      next.push(mv.state);
+    }
+    frontier = next;
+  }
+  return null;
+}
+function build(lo, hi, nBlocks, nWalls){
+  for(let attempt=0; attempt<400; attempt++){
+    const walls = [];
+    while(walls.length < nWalls){ const i = R(W*H); if(!walls.includes(i)) walls.push(i); }
+    const edge = [];
+    for(let r=0;r<H;r++) for(let c=0;c<W;c++) if(r===0||c===0||r===H-1||c===W-1) edge.push([r,c]);
+    const free = edge.filter(([r,c]) => !walls.includes(r*W+c));
+    if(!free.length) continue;
+    const target = pick(free);
+
+    const pieces = [{w:1,h:1,ball:true}], state = [];
+    let ball = null;
+    for(let t=0;t<200 && !ball;t++){
+      const r = R(H), c = R(W);
+      if((r===target[0] && c===target[1]) || walls.includes(r*W+c)) continue;
+      ball = [r,c];
+    }
+    if(!ball) continue;
+    state.push(ball);
+
+    for(let b=0;b<nBlocks;b++){
+      const len = 2 + R(2), horiz = Math.random() < 0.5;
+      const p = horiz ? {w:len,h:1} : {w:1,h:len};
+      for(let t=0;t<80;t++){
+        const r = R(H), c = R(W);
+        const g = blocked(pieces, state, walls, -1);
+        if(!fits(p, r, c, g)) continue;
+        if(r <= target[0] && target[0] < r+p.h && c <= target[1] && target[1] < c+p.w) continue;
+        pieces.push(p); state.push([r,c]); break;
+      }
+    }
+    if(pieces.length < 4) continue;
+    const res = solve(pieces, state, walls, target, hi);
+    if(res && res.dist >= lo) return {pieces, state, walls, target, best:res.dist};
+  }
+  return null;
+}
+const SETTINGS = {easy:[3,4,4,0], std:[5,7,5,1], hard:[7,9,5,2], fallback:[6,8,5,1]};
+function makePuzzle(d){
+  return build(...SETTINGS[d]) || build(...SETTINGS[d]) ||
+         build(...SETTINGS.fallback) || build(...SETTINGS.easy);
+}
+
+function stopperOf(pieces, state, walls, i, dir, dest){
+  const p = pieces[i], [dr, dc] = dir;
+  const cells = [];
+  for(let k=0;k<(dr ? p.w : p.h);k++){
+    const r = dest[0] + (dr === 1 ? p.h : dr === -1 ? -1 : k);
+    const c = dc === 1 ? dest[1] + p.w : dc === -1 ? dest[1] - 1 : dest[1] + k;
+    cells.push([r, c]);
+  }
+  for(const [r,c] of cells){
+    if(r < 0 || c < 0 || r >= H || c >= W) return 'the edge of the board';
+    if(walls.includes(r*W + c)) return 'a grey wall';
+    for(let j=0;j<state.length;j++){
+      if(j === i) continue;
+      const q = pieces[j], [qr,qc] = state[j];
+      if(r >= qr && r < qr+q.h && c >= qc && c < qc+q.w)
+        return j === 0 ? 'the ball' : 'the ' + NAMES[(j-1)%NAMES.length] + ' block';
+    }
+  }
+  return 'the edge of the board';
+}
+const dirWord = d => d[0] === -1 ? 'up' : d[0] === 1 ? 'down' : d[1] === -1 ? 'left' : 'right';
+const pieceWord = i => i === 0 ? 'the ball' : 'the ' + NAMES[(i-1)%NAMES.length] + ' block';
+
+/* ---------- board ---------- */
+let P = null, st = [], moves = 0, sel = -1, cell = 48, gap = 4;
+let level = 1, t0 = 0, tick = null, solved = false, assisted = false, queued = null, hintLevel = 0;
+let runEnd = 0, runTimer = null;
+const stats = {solved:0, skipped:0, assisted:0, waste:[], times:[]};
+
+function sizeBoard(){
+  const avail = Math.min(window.innerWidth - 80, 340);
+  cell = Math.max(34, Math.min(50, Math.floor((avail - 5*gap) / 6)));
+  const px = W*cell + (W-1)*gap;
+  $('#board').style.width = px+'px';
+  $('#board').style.height = px+'px';
+  $('#board').style.padding = '0';
+}
+const at = i => i*(cell+gap);
+
+/*
+ * Which way can the ball arrive?
+ *
+ * Everything slides until it hits something, so the ball only stops ON the
+ * target when the cell immediately beyond the target is already blocked — by a
+ * piece, a wall, or the edge of the board. That is the rule players miss most
+ * often, so the viable approaches are drawn on the target itself and update as
+ * pieces move. It shows the mechanic, not the solution: finding a route that
+ * delivers the ball along one of these lines is still the puzzle.
+ */
+const SIDES = [
+  { d: [-1, 0], side: 'from-below', name: 'below' },
+  { d: [1, 0],  side: 'from-above', name: 'above' },
+  { d: [0, -1], side: 'from-right', name: 'the right' },
+  { d: [0, 1],  side: 'from-left',  name: 'the left' }
+];
+function entryDirs(){
+  const g = blocked(P.pieces, st, P.walls, 0);   // ignore the ball itself
+  const [tr, tc] = P.target;
+  return SIDES.filter(({ d }) => {
+    const r = tr + d[0], c = tc + d[1];
+    if(r < 0 || c < 0 || r >= H || c >= W) return true;   // the board edge stops it
+    return g[r * W + c];
+  });
+}
+const list = xs => xs.length < 2 ? (xs[0] || '') :
+  xs.slice(0, -1).join(', ') + ' or ' + xs[xs.length - 1];
+
+function draw(){
+  const b = $('#board');
+  let html = '';
+  for(let r=0;r<H;r++) for(let c=0;c<W;c++)
+    html += '<div class="sq" style="left:'+at(c)+'px;top:'+at(r)+'px;width:'+cell+'px;height:'+cell+'px"></div>';
+  const entries = entryDirs();
+  const entryNames = entries.map(e => e.name);
+  const entryLabel = entryNames.length
+    ? 'Target square. The ball can currently stop here coming from ' + list(entryNames) + '.'
+    : 'Target square. Nothing would stop the ball here yet — put a blocker just beyond it.';
+  html += '<div class="target' + (entries.length ? '' : ' dead') + '" role="img" aria-label="' +
+          entryLabel + '" title="' + entryLabel + '" style="left:'+at(P.target[1])+'px;top:'+at(P.target[0])+
+          'px;width:'+cell+'px;height:'+cell+'px">' +
+          entries.map(e => '<span class="entry ' + e.side + '"></span>').join('') +
+          '</div>';
+  P.walls.forEach(i => {
+    html += '<div class="wall" style="left:'+at(i%W)+'px;top:'+at(Math.floor(i/W))+
+            'px;width:'+cell+'px;height:'+cell+'px"></div>';
+  });
+  st.forEach(([r,c], i) => {
+    const p = P.pieces[i];
+    const w = p.w*cell + (p.w-1)*gap, h = p.h*cell + (p.h-1)*gap;
+    if(i === 0){
+      const d = Math.round(cell*0.72), off = Math.round((cell-d)/2);
+      html += '<div class="ball'+(sel===0?' sel':'')+'" data-i="0" style="left:'+(at(c)+off)+'px;top:'+
+              (at(r)+off)+'px;width:'+d+'px;height:'+d+'px"></div>';
+    } else {
+      html += '<div class="pc'+(sel===i?' sel':'')+'" data-i="'+i+'" style="left:'+at(c)+'px;top:'+at(r)+
+              'px;width:'+w+'px;height:'+h+'px;background:'+COLS[(i-1)%COLS.length]+'"></div>';
+    }
+  });
+  b.innerHTML = html;
+  b.querySelectorAll('[data-i]').forEach(el => el.onclick = ev => { ev.stopPropagation(); choose(+el.dataset.i); });
+  $('#moves').textContent = moves;
+  $('#best').textContent = P.best;
+  $('#level').textContent = level;
+}
+function choose(i){
+  if(solved) return;
+  sel = (sel === i) ? -1 : i;
+  draw();
+}
+function move(dr, dc){
+  if(solved || sel < 0) return;
+  const np = slide(P.pieces, st, P.walls, sel, dr, dc);
+  if(!np) return;
+  st = st.map(x => x.slice()); st[sel] = np;
+  moves++;
+  draw();
+  check();
+}
+function check(){
+  if(st[0][0] === P.target[0] && st[0][1] === P.target[1]){
+    solved = true; sel = -1; clearInterval(tick);
+    const secs = (performance.now()-t0)/1000;
+    if(!assisted){
+      stats.solved++; stats.waste.push(moves - P.best); stats.times.push(secs);
+      $('#verdict').textContent = moves === P.best
+        ? 'Solved in ' + moves + ' — the shortest possible.'
+        : 'Solved in ' + moves + ' moves. Shortest was ' + P.best + '.';
+      $('#verdict').className = 'verdict right';
+    } else {
+      $('#verdict').textContent = 'Solved with help — not counted.';
+      $('#verdict').className = 'verdict';
+    }
+    updateStats();
+    setTimeout(() => { if($('#summary').hidden) nextLevel(); }, 900);
+  }
+}
+
+/* board clicks away from a piece decide the direction */
+$('#board').onclick = ev => {
+  if(sel < 0 || solved) return;
+  const rect = $('#board').getBoundingClientRect();
+  const c = Math.floor((ev.clientX - rect.left) / (cell+gap));
+  const r = Math.floor((ev.clientY - rect.top) / (cell+gap));
+  const p = P.pieces[sel], [pr, pc] = st[sel];
+  const dy = r - (pr + (p.h-1)/2), dx = c - (pc + (p.w-1)/2);
+  if(Math.abs(dy) >= Math.abs(dx)) move(dy < 0 ? -1 : 1, 0);
+  else move(0, dx < 0 ? -1 : 1);
+};
+document.addEventListener('keydown', e => {
+  const m = {ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1]}[e.key];
+  if(m){ e.preventDefault(); move(m[0], m[1]); }
+});
+
+/* ---------- levels ---------- */
+function loadPuzzle(p){
+  P = p; st = P.state.map(x => x.slice()); moves = 0; sel = -1; solved = false; assisted = false; hintLevel = 0;
+  $('#plan').hidden = true;
+  sizeBoard(); draw();
+  $('#verdict').textContent = 'Get the red ball to the ringed square. Click a piece, then click the direction you want it to slide.';
+  $('#verdict').className = 'verdict';
+  $('#summary').hidden = true;
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+  setTimeout(() => { queued = makePuzzle($('#diff').value); }, 400);   // build the next one in the background
+}
+function nextLevel(){
+  level++;
+  const p = queued || makePuzzle($('#diff').value);
+  queued = null;
+  if(!p){ $('#verdict').textContent = 'Could not build a level — press Skip.'; return; }
+  loadPuzzle(p);
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+$('#reset').onclick = () => {
+  if(!P) return;
+  st = P.state.map(x => x.slice()); moves = 0; sel = -1; solved = false; hintLevel = 0;
+  $('#plan').hidden = true;
+  draw();
+  $('#verdict').textContent = 'Back to the start. Plan the route before you touch anything.';
+  $('#verdict').className = 'verdict';
+};
+$('#skip').onclick = () => { if(!solved) stats.skipped++; updateStats(); nextLevel(); };
+$('#hint').onclick = () => {
+  if(!P || solved) return;
+  const res = solve(P.pieces, st, P.walls, P.target, P.best + 6);
+  if(!res){
+    $('#verdict').textContent = 'There is no way through from here — press Reset.';
+    $('#verdict').className = 'verdict wrong'; return;
+  }
+  hintLevel++;
+  if(hintLevel === 1){
+    // strategic nudge: how the ball finishes, and how much clearing comes first
+    let s2 = st.map(x => x.slice()), last = null, ballMoves = 0, before = 0;
+    for(const mv of res.path){
+      if(mv.piece === 0){ last = {mv, state:s2.map(x=>x.slice())}; ballMoves++; }
+      else if(!ballMoves) before++;
+      const np = slide(P.pieces, s2, P.walls, mv.piece, mv.dir[0], mv.dir[1]);
+      s2 = s2.map(x=>x.slice()); s2[mv.piece] = np;
+    }
+    const fin = res.path[res.path.length-1];
+    const stopper = stopperOf(P.pieces, last.state, P.walls, 0, fin.dir, P.target);
+    $('#verdict').textContent = 'The ball finishes by sliding ' + dirWord(fin.dir) +
+      ' onto the target, stopped by ' + stopper + '. ' +
+      (before ? before + ' block move' + (before===1?'':'s') + ' to clear the way first.'
+              : 'The route is already open — move the ball.') +
+      ' (' + res.dist + ' moves left in total.)';
+    $('#verdict').className = 'verdict';
+    return;
+  }
+  const mv = res.path[0];
+  $('#verdict').textContent = 'Move ' + pieceWord(mv.piece) + ' ' + dirWord(mv.dir) +
+    ' — it slides until it hits ' + stopperOf(P.pieces, st, P.walls, mv.piece, mv.dir,
+      slide(P.pieces, st, P.walls, mv.piece, mv.dir[0], mv.dir[1])) + '.';
+  $('#verdict').className = 'verdict';
+  const el = $('#board').querySelector('[data-i="'+mv.piece+'"]');
+  if(el){ el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
+};
+
+$('#walk').onclick = () => {
+  if(!P || solved) return;
+  const res = solve(P.pieces, st, P.walls, P.target, P.best + 6);
+  if(!res){
+    $('#verdict').textContent = 'There is no way through from here — press Reset.';
+    $('#verdict').className = 'verdict wrong'; return;
+  }
+  assisted = true;
+  let s2 = st.map(x => x.slice());
+  const items = res.path.map(mv => {
+    const np = slide(P.pieces, s2, P.walls, mv.piece, mv.dir[0], mv.dir[1]);
+    const stop = stopperOf(P.pieces, s2, P.walls, mv.piece, mv.dir, np);
+    s2 = s2.map(x=>x.slice()); s2[mv.piece] = np;
+    return '<li>Move ' + pieceWord(mv.piece) + ' <b>' + dirWord(mv.dir) +
+           '</b> — it runs until it hits ' + stop + '.</li>';
+  }).join('');
+  const fin = res.path[res.path.length-1];
+  $('#plan').innerHTML =
+    '<h4>The plan</h4>' +
+    '<p class="why">Read it backwards first: the ball ends up sliding <b>' + dirWord(fin.dir) +
+    '</b> onto the target. Everything before that exists only to open that one run.</p>' +
+    '<ol>' + items + '</ol>';
+  $('#plan').hidden = false;
+  $('#verdict').textContent = 'Following the plan — this level will not be counted.';
+  $('#verdict').className = 'verdict';
+};
+
+function updateStats(){
+  $('#s-solved').textContent = stats.solved;
+  $('#s-skip').textContent = stats.skipped;
+  const w = stats.waste, t = stats.times;
+  $('#s-waste').textContent = w.length ? (w.reduce((a,b)=>a+b,0)/w.length).toFixed(1) : '—';
+  $('#s-time').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(0)+'s' : '—';
+}
+
+$('#diff').onchange = () => { queued = null; level = 1; loadPuzzle(makePuzzle($('#diff').value)); };
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  stats.solved = 0; stats.skipped = 0; stats.waste = []; stats.times = [];
+  level = 0; updateStats();
+  runEnd = performance.now() + 6*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 60000);
+    if(left <= 0) endRun();
+  }, 200);
+  nextLevel();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; solved = true;
+  $('#run').textContent = 'Start 6-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  const w = stats.waste, t = stats.times;
+  const avgW = w.length ? w.reduce((a,b)=>a+b,0)/w.length : 0;
+  const avgT = t.length ? t.reduce((a,b)=>a+b,0)/t.length : 0;
+  const perfect = w.filter(x => x === 0).length;
+
+  let note;
+  if(!stats.solved) note = 'No levels solved. Drop to Easy and get the routine working before you time yourself.';
+  else if(avgW > 3) note = 'You are averaging '+avgW.toFixed(1)+' moves more than the shortest route. That is shuffling — plan the ball\\u2019s corridor before the first drag.';
+  else if(stats.skipped > stats.solved) note = 'More skipped than solved. Skipping is right when a level is beyond you, but try one full replan before you skip.';
+  else if(avgT > 40) note = 'Solving cleanly but slowly at '+avgT.toFixed(0)+'s a level. Six minutes only gives you around '+Math.round(360/avgT)+' levels at that pace.';
+  else note = stats.solved+' solved, '+perfect+' of them in the fewest possible moves, averaging '+avgT.toFixed(0)+'s. Strong.';
+
+  $('#summary').innerHTML =
+    '<h3>Six-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.solved+'</b><span>solved</span></div>' +
+      '<div><b>'+perfect+'</b><span>in fewest moves</span></div>' +
+      '<div><b class="no">'+stats.skipped+'</b><span>skipped</span></div>' +
+      '<div><b>'+(w.length?avgW.toFixed(1):'—')+'</b><span>moves over best</span></div>' +
+      '<div><b>'+(t.length?avgT.toFixed(0)+'s':'—')+'</b><span>per level</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => { level = 1; loadPuzzle(makePuzzle($('#diff').value)); };
+}
+
+window.addEventListener('resize', () => { if(P){ sizeBoard(); draw(); } });
+loadPuzzle(makePuzzle('easy'));
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

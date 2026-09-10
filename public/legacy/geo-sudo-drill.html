@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Geo-Sudo drill</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --cell:#EFEDF1; --good:#2E7D46; --bad:#C0392B;
+    --cs:clamp(46px,11.5vw,66px);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,320px)}
+  @media (max-width:860px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-0.01em}
+  .sub{color:var(--muted); font-size:14px; flex:1 1 200px; margin:0}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .board{padding:22px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:18px}
+  .grid{display:grid; gap:8px}
+  .cell{aspect-ratio:1; background:var(--cell); border-radius:6px; display:flex; align-items:center; justify-content:center}
+  .cell.guide{background:#E4E8EE}
+  .cell.q{background:#FFF; box-shadow:inset 0 0 0 2px var(--blue)}
+  .cell.q.right{box-shadow:inset 0 0 0 2px var(--good)}
+  .cell.q.wrong{box-shadow:inset 0 0 0 2px var(--bad)}
+  .cell.deduced{box-shadow:inset 0 0 0 2px #9AA6B2}
+  .cell.look{box-shadow:inset 0 0 0 2px var(--blue), 0 0 0 3px rgba(31,111,178,.18)}
+  .cell svg{width:74%; height:74%; display:block}
+  .qmark{font:700 26px/1 ui-sans-serif,system-ui}
+  .count{display:flex; align-items:center; justify-content:center;
+         font:600 13px/1 ui-monospace,Menlo,monospace; color:var(--muted)}
+  .count.hot{color:var(--blue)}
+  .tray{display:flex; gap:6px; padding:6px; border:4px solid var(--blue); border-radius:4px; background:var(--face); flex-wrap:wrap; justify-content:center}
+  .tray button{width:var(--cs); aspect-ratio:1; padding:8px; background:#fff; border:1px solid var(--rule);
+               border-radius:2px; cursor:pointer; display:flex; align-items:center; justify-content:center}
+  .tray button:hover{background:#F4F6F4}
+  .tray button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .tray button[disabled]{cursor:default; opacity:.45}
+  .tray svg{width:100%; height:100%}
+  .keyhint{color:var(--muted); font-size:12.5px; margin:-10px 0 0}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .btn[disabled]{opacity:.45; cursor:default}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  .verdict{min-height:22px; font-size:15px; font-weight:600; margin:0}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.steps{margin:0; padding-left:20px; font-size:14.5px}
+  ol.steps li{margin-bottom:9px} ol.steps li:last-child{margin-bottom:0}
+  .cellref{font-weight:650}
+  .method{font-size:14.5px} .method p{margin:0 0 10px} .method p:last-child{margin:0}
+  .shake{animation:shake .28s}
+  @keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+  @media (prefers-reduced-motion:reduce){ .shake{animation:none} }
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --cell:#262f38; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .cell.guide{background:#2f3a45}
+  :where(:root[data-theme="dark"]) .cell.q{background:#1b2229}
+  :where(:root[data-theme="dark"]) .cell.deduced{box-shadow:inset 0 0 0 2px #8d9aa6}
+  :where(:root[data-theme="dark"]) .tray button{background:#1b2229}
+  :where(:root[data-theme="dark"]) .tray button:hover{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Geo-Sudo drill</h1>
+    <p class="sub">Every shape appears once in each row and once in each column. Find the missing one.</p>
+    <div class="clock" id="clock">0.0s</div>
+  </header>
+
+  <main class="panel board">
+    <div class="grid" id="grid" role="group" aria-label="Puzzle grid"></div>
+    <div class="tray" id="tray" role="group" aria-label="Answer options"></div>
+    <p class="keyhint" id="keyhint"></p>
+    <p class="verdict" id="verdict"></p>
+    <div class="controls">
+      <button class="btn primary" id="next">New puzzle</button>
+      <button class="btn" id="look">Where do I look?</button>
+      <button class="btn" id="work">Show working</button>
+      <label>Grid
+        <select id="size">
+          <option value="5" selected>5 &times; 5</option>
+          <option value="6">6 &times; 6</option>
+        </select>
+      </label>
+      <label>Difficulty
+        <select id="diff">
+          <option value="1">One step</option>
+          <option value="2" selected>Two steps</option>
+          <option value="3">Three steps</option>
+          <option value="4">Four steps</option>
+          <option value="5">Five steps</option>
+          <option value="6">Six steps</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="bare"> Test conditions</label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-solved">0</b><span>solved</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>first-guess accuracy</span></div>
+        <div class="stat"><b id="s-avg">—</b><span>average time</span></div>
+        <div class="stat"><b id="s-best">—</b><span>fastest</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>Working</h2>
+      <div id="working"></div>
+    </section>
+    <section class="panel pad">
+      <h2>The method</h2>
+      <div class="method">
+        <p>Start at the <strong>?</strong>: list what its row is missing and what its column is missing. The answer is in both lists.</p>
+        <p>Still tied? Fill the tightest cell you can find first. If nothing is forced anywhere, switch to hunting one shape — take a line missing it and ask which cells in that line could still take it.</p>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<script>
+const ALL = [
+  {id:'cross',    name:'cross',    color:'#59B4E4'},
+  {id:'circle',   name:'circle',   color:'#7CC13F'},
+  {id:'triangle', name:'triangle', color:'#F4C13C'},
+  {id:'square',   name:'square',   color:'#E13A2D'},
+  {id:'star',     name:'star',     color:'#7A3BB5'},
+  {id:'diamond',  name:'diamond',  color:'#EF8A2B'}
+];
+const BODY = {
+  cross:'<polygon points="33,12 67,12 67,33 88,33 88,67 67,67 67,88 33,88 33,67 12,67 12,33 33,33"/>',
+  circle:'<circle cx="50" cy="50" r="34"/>',
+  triangle:'<polygon points="50,16 87,84 13,84"/>',
+  square:'<rect x="16" y="16" width="68" height="68" rx="5"/>',
+  star:'<polygon points="50,10 59.4,37.1 88,37.6 65.2,54.9 73.5,82.4 50,66 26.5,82.4 34.8,54.9 12,37.6 40.6,37.1"/>',
+  diamond:'<polygon points="50,12 84,50 50,88 16,50"/>'
+};
+const svgFor = i => '<svg viewBox="0 0 100 100" aria-hidden="true" fill="'+ALL[i].color+'">'+BODY[ALL[i].id]+'</svg>';
+
+let N = 5;                                   // grid size, also the number of shapes
+const shapeName = i => ALL[i].name;
+
+/* ---------- puzzle logic ---------- */
+const R = n => Math.floor(Math.random()*n);
+function shuffled(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=R(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const range = () => [...Array(N).keys()];
+
+function randomLatin(){
+  const rp = shuffled(range()), cp = shuffled(range()), sp = shuffled(range());
+  const g = range().map(r => range().map(c => sp[(rp[r]+cp[c])%N]));
+  return Math.random()<0.5 ? g : range().map(c => range().map(r => g[r][c]));
+}
+function candsFor(g,r,c){
+  const used = new Set();
+  for(let i=0;i<N;i++){ if(g[r][i]>=0) used.add(g[r][i]); if(g[i][c]>=0) used.add(g[i][c]); }
+  return range().filter(s => !used.has(s));
+}
+const rowSyms = (g,r) => g[r].filter(v=>v>=0);
+const colSyms = (g,c) => g.map(row=>row[c]).filter(v=>v>=0);
+
+function solveHuman(clues, qr, qc, cap){
+  const g = clues.map(r=>r.slice());
+  const steps = [];
+  while(g[qr][qc] === -1){
+    if(steps.length >= cap) return {solved:false, steps, grid:g};
+    let move = null;
+    const qcand = candsFor(g,qr,qc);
+    if(qcand.length === 1) move = {type:'only', r:qr, c:qc, s:qcand[0]};
+    if(!move) outer: for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(g[r][c] !== -1) continue;
+      const cd = candsFor(g,r,c);
+      if(cd.length === 1){ move = {type:'only', r, c, s:cd[0]}; break outer; }
+    }
+    if(!move) outer2: for(let s=0;s<N;s++){
+      for(let r=0;r<N;r++){
+        if(g[r].includes(s)) continue;
+        const spots = range().filter(c => g[r][c]===-1 && candsFor(g,r,c).includes(s));
+        if(spots.length === 1){ move = {type:'onlyhome', line:'row', r, c:spots[0], s}; break outer2; }
+      }
+      for(let c=0;c<N;c++){
+        if(g.some(row=>row[c]===s)) continue;
+        const spots = range().filter(r => g[r][c]===-1 && candsFor(g,r,c).includes(s));
+        if(spots.length === 1){ move = {type:'onlyhome', line:'column', r:spots[0], c, s}; break outer2; }
+      }
+    }
+    if(!move) return {solved:false, steps, grid:g};
+    move.rowHas = rowSyms(g, move.r);
+    move.colHas = colSyms(g, move.c);
+    g[move.r][move.c] = move.s;
+    steps.push(move);
+  }
+  return {solved:true, steps, grid:g};
+}
+
+function makePuzzle(maxSteps){
+  const target = N===5 ? 8 : 12;
+  for(let attempt=0; attempt<300; attempt++){
+    const full = randomLatin();
+    const qr = R(N), qc = R(N);
+    const clues = full.map(r=>r.slice());
+    clues[qr][qc] = -1;
+    const cells = shuffled([].concat(...full.map((row,r)=>row.map((_,c)=>[r,c]))))
+                    .filter(([r,c]) => !(r===qr && c===qc));
+    for(const [r,c] of cells){
+      const keep = clues[r][c];
+      clues[r][c] = -1;
+      if(!solveHuman(clues, qr, qc, maxSteps).solved) clues[r][c] = keep;
+    }
+    const base = solveHuman(clues, qr, qc, maxSteps);
+    if(!base.solved || base.steps.length !== maxSteps) continue;
+
+    let given = clues.flat().filter(v=>v>=0).length;
+    for(const [r,c] of shuffled(cells.filter(([r,c])=>clues[r][c] === -1))){
+      if(given >= target) break;
+      clues[r][c] = full[r][c];
+      const t = solveHuman(clues, qr, qc, maxSteps);
+      if(t.solved && t.steps.length === maxSteps) given++; else clues[r][c] = -1;
+    }
+    return {clues, qr, qc, answer:full[qr][qc], steps:solveHuman(clues,qr,qc,maxSteps).steps};
+  }
+  return null;
+}
+
+/* ---------- interface ---------- */
+const $ = s => document.querySelector(s);
+const gridEl = $('#grid'), trayEl = $('#tray');
+let P = null, t0 = 0, timer = null, firstTry = true, done = false, revealed = false;
+const stats = {solved:0, clean:0, times:[]};
+const bare = () => $('#bare').checked;
+const cellName = (r,c) => 'Row '+(r+1)+', column '+(c+1);
+const listOf = a => a.map(s=>'the '+shapeName(s)).join(', ').replace(/,([^,]*)$/, ' and$1');
+
+function draw(){
+  gridEl.innerHTML = '';
+  gridEl.style.gridTemplateColumns = 'repeat('+N+', var(--cs))' + (bare() ? '' : ' 20px');
+  $('#look').disabled = bare();
+  const rowN = r => P.clues[r].filter(v=>v>=0).length;
+  const colN = c => P.clues.filter(row=>row[c]>=0).length;
+  const hot = N===5 ? 3 : 4;
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const d = document.createElement('div');
+      d.className = 'cell';
+      if((r===P.qr || c===P.qc) && !bare()) d.classList.add('guide');
+      if(r===P.qr && c===P.qc){
+        d.classList.add('q','target');
+        d.innerHTML = '<span class="qmark">?</span>';
+        d.setAttribute('aria-label','Missing shape, '+cellName(r,c));
+      } else if(P.clues[r][c] >= 0){
+        d.innerHTML = svgFor(P.clues[r][c]);
+        d.setAttribute('aria-label', shapeName(P.clues[r][c])+', '+cellName(r,c));
+      }
+      d.dataset.rc = r+','+c;
+      gridEl.appendChild(d);
+    }
+    if(bare()) continue;
+    const rc = document.createElement('div');
+    rc.className = 'count' + (rowN(r)>=hot ? ' hot' : '');
+    rc.textContent = rowN(r);
+    gridEl.appendChild(rc);
+  }
+  if(bare()) return;
+  for(let c=0;c<N;c++){
+    const cc = document.createElement('div');
+    cc.className = 'count' + (colN(c)>=hot ? ' hot' : '');
+    cc.textContent = colN(c);
+    gridEl.appendChild(cc);
+  }
+  gridEl.appendChild(document.createElement('div'));
+}
+
+function drawTray(){
+  trayEl.innerHTML = '';
+  for(let i=0;i<N;i++){
+    const b = document.createElement('button');
+    b.innerHTML = svgFor(i);
+    b.setAttribute('aria-label', shapeName(i));
+    b.onclick = () => answer(i);
+    trayEl.appendChild(b);
+  }
+  $('#keyhint').textContent = 'Press 1–'+N+' to answer, N for a new puzzle';
+}
+
+const tick = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function newPuzzle(){
+  N = +$('#size').value;
+  document.documentElement.style.setProperty('--cs', N===5 ? 'clamp(46px,11.5vw,66px)' : 'clamp(38px,9.5vw,56px)');
+  drawTray();
+  const p = makePuzzle(+$('#diff').value);
+  if(!p){ $('#verdict').textContent = 'Could not build that one — press New puzzle again.'; return; }
+  P = p; firstTry = true; done = false; revealed = false;
+  draw();
+  [...trayEl.children].forEach(b => b.disabled = false);
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#working').innerHTML = '<p class="method" style="color:var(--muted)">Solve it, or press Show working for the chain of eliminations.</p>';
+  clearInterval(timer); t0 = performance.now(); tick(); timer = setInterval(tick, 100);
+}
+
+function answer(i){
+  if(!P || done || i >= N) return;
+  const cell = gridEl.querySelector('.target');
+  if(i === P.answer){
+    done = true; clearInterval(timer);
+    const secs = (performance.now()-t0)/1000;
+    cell.classList.remove('wrong'); cell.classList.add('right');
+    cell.innerHTML = svgFor(i);
+    [...trayEl.children].forEach(b => b.disabled = true);
+    if(!revealed){ stats.solved++; if(firstTry) stats.clean++; stats.times.push(secs); }
+    $('#verdict').textContent = revealed ? 'Correct.'
+      : (firstTry ? 'Correct — '+secs.toFixed(1)+'s' : 'Correct on retry — '+secs.toFixed(1)+'s');
+    $('#verdict').className = 'verdict right';
+    showWorking(); updateStats();
+  } else {
+    firstTry = false;
+    cell.classList.add('wrong','shake');
+    setTimeout(()=>cell.classList.remove('shake'), 300);
+    $('#verdict').textContent = 'Not the '+shapeName(i)+' — check its row and column again.';
+    $('#verdict').className = 'verdict wrong';
+  }
+}
+
+function stepText(m){
+  const shape = shapeName(m.s);
+  if(m.type === 'only'){
+    const bits = [];
+    if(m.rowHas.length) bits.push('row '+(m.r+1)+' already holds '+listOf(m.rowHas));
+    if(m.colHas.length) bits.push('column '+(m.c+1)+' already holds '+listOf(m.colHas));
+    return '<span class="cellref">'+cellName(m.r,m.c)+' → '+shape+'.</span> '+bits.join('; ')+'. Nothing else fits.';
+  }
+  return '<span class="cellref">'+cellName(m.r,m.c)+' → '+shape+'.</span> That '+m.line+
+         ' has no '+shape+' yet, and every other empty cell in it sits in a line that already has one.';
+}
+
+function showWorking(){
+  if(!P) return;
+  $('#working').innerHTML = '<ol class="steps">'+P.steps.map(m=>'<li>'+stepText(m)+'</li>').join('')+'</ol>';
+  P.steps.forEach(m=>{
+    const el = gridEl.querySelector('[data-rc="'+m.r+','+m.c+'"]');
+    if(el && !el.classList.contains('target')){ el.classList.add('deduced'); el.innerHTML = svgFor(m.s); }
+  });
+}
+
+function updateStats(){
+  $('#s-solved').textContent = stats.solved;
+  $('#s-acc').textContent = stats.solved ? Math.round(100*stats.clean/stats.solved)+'%' : '—';
+  const t = stats.times;
+  $('#s-avg').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  $('#s-best').textContent = t.length ? Math.min(...t).toFixed(1)+'s' : '—';
+}
+
+$('#look').onclick = () => {
+  if(!P || done) return;
+  gridEl.querySelectorAll('.look').forEach(e=>e.classList.remove('look'));
+  if(candsFor(P.clues, P.qr, P.qc).length === 1){
+    $('#verdict').textContent = 'Its row and column already settle it — nothing else needed.';
+    $('#verdict').className = 'verdict'; return;
+  }
+  let best = null, bn = 99;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    if(P.clues[r][c] !== -1 || (r===P.qr && c===P.qc)) continue;
+    const n = candsFor(P.clues,r,c).length + ((r===P.qr || c===P.qc) ? 0 : 0.5);
+    if(n < bn){ bn = n; best = [r,c]; }
+  }
+  if(!best) return;
+  gridEl.querySelector('[data-rc="'+best[0]+','+best[1]+'"]').classList.add('look');
+  $('#verdict').textContent = Math.floor(bn) === 1
+    ? 'Fill row '+(best[0]+1)+', column '+(best[1]+1)+' first — only one shape fits there.'
+    : 'Nothing is forced yet. Start hunting a single shape instead — row '+(best[0]+1)+', column '+(best[1]+1)+' is the tightest cell.';
+  $('#verdict').className = 'verdict';
+};
+
+$('#next').onclick = newPuzzle;
+$('#work').onclick = () => { clearInterval(timer); revealed = true; showWorking(); };
+$('#diff').onchange = newPuzzle;
+$('#size').onchange = newPuzzle;
+$('#bare').onchange = newPuzzle;
+document.addEventListener('keydown', e => {
+  if(e.key >= '1' && e.key <= '6') answer(+e.key - 1);
+  if(e.key.toLowerCase() === 'n') newPuzzle();
+});
+
+newPuzzle();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

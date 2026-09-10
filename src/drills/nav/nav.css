@@ -1,0 +1,55 @@
+.nav__ask { margin: 0; color: var(--ink-muted); font-size: var(--step--1); }
+
+.nav__arrows {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.nav__arrows figure { margin: 0; text-align: center; }
+.nav__arrows figcaption { font-size: var(--step--1); color: var(--ink-muted); margin-top: var(--space-1); }
+.nav__box {
+  width: clamp(88px, 26vw, 124px); aspect-ratio: 1;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); display: grid; place-items: center;
+}
+.nav__box svg { width: 76%; height: 76%; }
+.nav__to { font-size: 1.6rem; color: var(--ink-muted); }
+
+.nav__steps { margin: 0; padding-left: 1.2em; font-weight: 600; }
+.nav__steps li { margin-bottom: var(--space-1); }
+
+.nav__options {
+  display: grid; gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  width: 100%; max-width: 440px;
+}
+.nav__options--arrows { grid-template-columns: repeat(4, 1fr); max-width: 340px; }
+
+.nav__opt {
+  font: inherit; min-height: var(--tap);
+  display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-sunken); color: var(--ink); cursor: pointer;
+}
+.nav__opt { transition: background-color 120ms ease, border-color 120ms ease; }
+.nav__opt:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface-sunken));
+  border-color: var(--ink-muted);
+}
+.nav__opt:active:not([disabled]) { background: color-mix(in srgb, var(--ink) 16%, var(--surface-sunken)); }
+.nav__opt[disabled] { cursor: default; }
+/* Right and wrong carry a border weight as well as a colour. */
+.nav__opt.is-right { border: 2px solid var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.nav__opt.is-wrong { border: 2px solid var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.nav__opt kbd { font: 500 var(--step--1) var(--mono); color: var(--ink-muted); }
+
+.field { display: flex; align-items: center; gap: var(--space-2); }
+.field > span { color: var(--ink-muted); }
+.field select {
+  font: inherit; min-height: var(--tap); padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.field select:hover { border-color: var(--ink-muted); }
+.field--check input { width: 20px; height: 20px; }

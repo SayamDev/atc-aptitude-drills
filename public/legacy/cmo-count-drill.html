@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Moving dot count drill (cmo style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 220px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:20px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:16px}
+  canvas{border-radius:50%; background:#0C1116; touch-action:manipulation; max-width:100%}
+  .entry{display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center}
+  .readout{min-width:96px; text-align:center; font:600 30px/1 ui-monospace,Menlo,monospace;
+           font-variant-numeric:tabular-nums; border:1px solid var(--rule); border-radius:3px; padding:10px 14px; background:#fff}
+  .keypad{display:grid; grid-template-columns:repeat(5, 52px); gap:6px}
+  .keypad button{font:600 17px/1 ui-monospace,Menlo,monospace; padding:12px 0; border:1px solid var(--rule);
+                 border-radius:3px; background:#F7F8F7; cursor:pointer}
+  .keypad button:hover{background:#EDF0ED}
+  .keypad button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .keypad button.wide{grid-column:span 2}
+  .keypad button.go{background:var(--blue); border-color:var(--blue); color:#fff}
+  .verdict{min-height:26px; font-size:16px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 14px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .readout{background:#1b2229}
+  :where(:root[data-theme="dark"]) .keypad button{background:#232b33}
+  :where(:root[data-theme="dark"]) .keypad button:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .keypad button.go{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Moving dot count</h1>
+    <p class="sub">Count the dots inside the circle and enter the number. They keep moving — the count doesn't.</p>
+    <div class="clock" id="clock">0.0s</div>
+  </header>
+
+  <main class="panel">
+    <canvas id="cv" width="380" height="380" aria-label="Moving dots"></canvas>
+    <div class="entry">
+      <div class="readout" id="readout" aria-live="polite">–</div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+    <p class="verdict" id="verdict"></p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn" id="next">Skip</button>
+      <button class="btn primary" id="run">Start 2-minute run</button>
+      <label>Dots
+        <select id="range">
+          <option value="5,12">5 – 12</option>
+          <option value="8,18" selected>8 – 18</option>
+          <option value="12,25">12 – 25</option>
+        </select>
+      </label>
+      <label>Speed
+        <select id="speed">
+          <option value="0.55">Slow</option>
+          <option value="1" selected>Normal</option>
+          <option value="1.7">Fast</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>attempted</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>exact</span></div>
+        <div class="stat"><b id="s-avg">—</b><span>average time</span></div>
+        <div class="stat"><b id="s-err">—</b><span>average miss</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>How to count moving dots</h2>
+      <ol class="tips">
+        <li>Hold your gaze on the centre. Don't let your eyes chase a dot.</li>
+        <li>Count in threes, not ones — 3, 6, 9, 12.</li>
+        <li>Sweep once, top band to bottom band, and commit.</li>
+        <li>Never recount. A second pass counts a different arrangement.</li>
+        <li>If it's crowded, count the gaps or the tight clusters instead.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const R = n => Math.floor(Math.random()*n);
+
+let dots = [], truth = 0, entry = '', t0 = 0, tick = null, answered = false;
+let runEnd = 0, runTimer = null, raf = null;
+const stats = {done:0, right:0, times:[], errs:[]};
+
+function sizeCanvas(){
+  const d = Math.min(380, Math.max(260, window.innerWidth - 90));
+  cv.width = d; cv.height = d;
+}
+
+function spawn(){
+  const [lo, hi] = $('#range').value.split(',').map(Number);
+  truth = lo + R(hi - lo + 1);
+  const sp = +$('#speed').value;
+  const rad = cv.width/2, dotR = Math.max(4, cv.width/62);
+  dots = [];
+  for(let i=0;i<truth;i++){
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(rad - dotR*2.5);
+    const dir = Math.random()*Math.PI*2, v = (0.5 + Math.random()*1.1)*sp;
+    dots.push({x:rad + Math.cos(a)*r, y:rad + Math.sin(a)*r,
+               vx:Math.cos(dir)*v, vy:Math.sin(dir)*v, r:dotR});
+  }
+}
+
+function step(){
+  const rad = cv.width/2;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = '#0C1116';
+  ctx.beginPath(); ctx.arc(rad,rad,rad,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  for(const d of dots){
+    d.x += d.vx; d.y += d.vy;
+    const dx = d.x - rad, dy = d.y - rad, dist = Math.hypot(dx,dy), lim = rad - d.r - 2;
+    if(dist > lim){                                   // bounce off the rim
+      const nx = dx/dist, ny = dy/dist, dot = d.vx*nx + d.vy*ny;
+      d.vx -= 2*dot*nx; d.vy -= 2*dot*ny;
+      d.x = rad + nx*lim; d.y = rad + ny*lim;
+    }
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI*2); ctx.fill();
+  }
+  raf = requestAnimationFrame(step);
+}
+
+function drawKeypad(){
+  const k = $('#keypad'); k.innerHTML = '';
+  const keys = ['1','2','3','4','5','6','7','8','9','0'];
+  keys.forEach(n => { const b = document.createElement('button'); b.textContent = n;
+    b.onclick = () => type(n); k.appendChild(b); });
+  const c = document.createElement('button'); c.textContent = 'Clear'; c.className = 'wide';
+  c.onclick = () => { entry = ''; showEntry(); }; k.appendChild(c);
+  const e = document.createElement('button'); e.textContent = 'Enter'; e.className = 'wide go';
+  e.onclick = submit; k.appendChild(e);
+}
+const showEntry = () => $('#readout').textContent = entry === '' ? '–' : entry;
+function type(n){ if(answered) return; if(entry.length < 2) entry += n; showEntry(); }
+
+function newRound(){
+  answered = false; entry = ''; showEntry();
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#summary').hidden = true;
+  sizeCanvas(); spawn();
+  if(!raf) step();
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function submit(){
+  if(answered || entry === '') return;
+  answered = true; clearInterval(tick);
+  const guess = +entry, secs = (performance.now()-t0)/1000, ok = guess === truth;
+  stats.done++; stats.times.push(secs); stats.errs.push(Math.abs(guess - truth));
+  if(ok) stats.right++;
+  $('#verdict').textContent = ok ? 'Correct — '+truth+' in '+secs.toFixed(1)+'s'
+    : 'It was '+truth+', you said '+guess+' ('+(guess>truth?'+':'')+(guess-truth)+')';
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  updateStats();
+  setTimeout(() => { if(!$('#summary').hidden) return; newRound(); }, ok ? 700 : 1400);
+}
+
+function updateStats(){
+  $('#s-done').textContent = stats.done;
+  $('#s-acc').textContent = stats.done ? Math.round(100*stats.right/stats.done)+'%' : '—';
+  const t = stats.times, e = stats.errs;
+  $('#s-avg').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  $('#s-err').textContent = e.length ? (e.reduce((a,b)=>a+b,0)/e.length).toFixed(1) : '—';
+}
+
+$('#next').onclick = () => { if(!runEnd || !$('#summary').hidden) $('#verdict').textContent=''; newRound(); };
+$('#range').onchange = newRound;
+$('#speed').onchange = newRound;
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  stats.done = 0; stats.right = 0; stats.times = []; stats.errs = []; updateStats();
+  runEnd = performance.now() + 2*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 30000);
+    if(left <= 0) endRun();
+  }, 200);
+  newRound();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; answered = true;
+  $('#run').textContent = 'Start 2-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  $('#verdict').textContent = '';
+  const wrong = stats.done - stats.right;
+  const acc = stats.done ? Math.round(100*stats.right/stats.done) : 0;
+  const t = stats.times, e = stats.errs;
+  const avg = t.length ? t.reduce((a,b)=>a+b,0)/t.length : 0;
+  const err = e.length ? e.reduce((a,b)=>a+b,0)/e.length : 0;
+  const over = e.length ? stats.errs.filter((v,i)=>v>0).length : 0;
+
+  let note;
+  if(!stats.done) note = 'Nothing attempted. On a two-minute test an entered guess always beats a blank.';
+  else if(avg > 12) note = 'You averaged '+avg.toFixed(1)+'s per screen. That is only about '+Math.round(120/avg)+' screens in two minutes — cut the recounting and commit to your first sweep.';
+  else if(acc < 60 && err <= 1.5) note = 'You are close but not exact: average miss of '+err.toFixed(1)+' dots. That is usually one dot double-counted in a cluster. Slow down by a second and count clusters as a group.';
+  else if(acc < 60) note = 'Average miss of '+err.toFixed(1)+' dots suggests you are estimating rather than counting. Drop to the slower speed setting until exact counts come back.';
+  else note = 'Exact on '+acc+'% at '+avg.toFixed(1)+'s per screen — roughly '+Math.round(120/avg)+' screens in two minutes. Solid pace.';
+
+  $('#summary').innerHTML =
+    '<h3>Two-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.right+'</b><span>exact</span></div>' +
+      '<div><b class="no">'+wrong+'</b><span>missed</span></div>' +
+      '<div><b>'+stats.done+'</b><span>attempted</span></div>' +
+      '<div><b>'+(stats.done ? acc+'%' : '—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(avg ? avg.toFixed(1)+'s' : '—')+'</b><span>per screen</span></div>' +
+      '<div><b>'+(e.length ? err.toFixed(1) : '—')+'</b><span>average miss</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    (wrong ? '<p class="pace">You were out by more than two dots on '+
+      stats.errs.filter(v=>v>2).length+' of '+stats.done+' screens.</p>' : '') +
+    '<button class="btn primary" id="again">Start another run</button> ' +
+    '<button class="btn" id="free">Back to untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => newRound();
+}
+
+document.addEventListener('keydown', ev => {
+  if(ev.key >= '0' && ev.key <= '9') type(ev.key);
+  if(ev.key === 'Enter') { if(answered && !runEnd) newRound(); else submit(); }
+  if(ev.key === 'Backspace'){ entry = entry.slice(0,-1); showEntry(); }
+});
+window.addEventListener('resize', () => { sizeCanvas(); });
+
+drawKeypad(); newRound();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

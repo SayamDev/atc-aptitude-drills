@@ -1,0 +1,72 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--step-0)/1.55 var(--font);
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0 0 var(--space-3); text-wrap: balance; }
+h1 { font-size: var(--step-2); }
+h2 { font-size: var(--step-1); }
+p { margin: 0 0 var(--space-3); max-width: 68ch; }
+a { color: var(--accent); }
+
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+.skip-link {
+  position: absolute; left: var(--space-3); top: calc(-1 * var(--tap) - 8px); z-index: 10;
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent); color: var(--accent-ink);
+  border-radius: var(--radius); transition: top 120ms ease;
+}
+.skip-link:focus { top: var(--space-3); }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.shell { max-width: 1040px; margin: 0 auto; padding: var(--space-4); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+
+.btn {
+  font: inherit; min-height: var(--tap); padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-sunken); color: var(--ink); cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+/*
+ * Hover and press mix toward --ink, which lightens on the dark theme and darkens
+ * on the light one. The previous filter: brightness(0.97) only ever went one way:
+ * on dark it darkened the control, so hover read as "disabled" rather than "live",
+ * and at 3% it was barely visible either way.
+ */
+.btn:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface-sunken));
+  border-color: var(--ink-muted);
+}
+.btn:active:not([disabled]) { background: color-mix(in srgb, var(--ink) 16%, var(--surface-sunken)); }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+
+.btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn--primary:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 14%, var(--accent));
+  border-color: color-mix(in srgb, var(--ink) 14%, var(--accent));
+}
+.btn--primary:active:not([disabled]) { background: color-mix(in srgb, var(--ink) 24%, var(--accent)); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A tertiary action: available, but never competing with the run button. */
+.btn--quiet { background: transparent; border-color: transparent; color: var(--ink-muted); text-decoration: underline; }
+.btn--quiet:hover { color: var(--ink); filter: none; }

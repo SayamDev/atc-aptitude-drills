@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="ATC Aptitude Drills — free, open practice for air traffic controller selection tests">
+  <rect width="1200" height="320" fill="#12171c"/>
+  <rect y="316" width="1200" height="4" fill="#6fb3e8"/>
+
+  <g transform="translate(72,74)">
+    <text x="0" y="0" fill="#e8edf2" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="-0.5">ATC Aptitude Drills</text>
+    <text x="0" y="42" fill="#a3b0bb" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="20">Free, open practice for the aptitude tests used to select trainee air traffic controllers.</text>
+    <text x="0" y="72" fill="#a3b0bb" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="20">Every drill explains the format, teaches a method, and shows where you are losing marks.</text>
+  </g>
+
+  <g transform="translate(72,214)" font-family="Helvetica Neue,Helvetica,Arial,sans-serif">
+    <g>
+      <rect x="0" y="0" width="132" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+      <text x="16" y="27" fill="#e8edf2" font-size="21" font-weight="700">11</text>
+      <text x="16" y="46" fill="#a3b0bb" font-size="13">drills</text>
+    </g>
+    <g transform="translate(148,0)">
+      <rect x="0" y="0" width="132" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+      <text x="16" y="27" fill="#e8edf2" font-size="21" font-weight="700">98</text>
+      <text x="16" y="46" fill="#a3b0bb" font-size="13">unit tests</text>
+    </g>
+    <g transform="translate(296,0)">
+      <rect x="0" y="0" width="160" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+      <text x="16" y="27" fill="#e8edf2" font-size="21" font-weight="700">WCAG 2.2 AA</text>
+      <text x="16" y="46" fill="#a3b0bb" font-size="13">accessibility target</text>
+    </g>
+    <g transform="translate(472,0)">
+      <rect x="0" y="0" width="182" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+      <text x="16" y="27" fill="#6cc48a" font-size="21" font-weight="700">Nothing uploaded</text>
+      <text x="16" y="46" fill="#a3b0bb" font-size="13">runs entirely in the browser</text>
+    </g>
+  </g>
+
+  <g transform="translate(880,96)" fill="none" stroke="#6fb3e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(0,0) scale(2.1)"><path d="M5 20V9a4 4 0 0 1 4-4h8"/><path d="m14 2 4 3-4 3"/></g>
+    <g transform="translate(120,0) scale(2.1)"><circle cx="12" cy="12" r="8"/><path d="m9 15 3-8 3 8-3-2z"/></g>
+    <g transform="translate(240,0) scale(2.1)"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M12 3.5v17M3.5 12h17"/></g>
+    <g transform="translate(0,110) scale(2.1)"><circle cx="8" cy="8" r="2"/><circle cx="17" cy="14" r="2"/><circle cx="9" cy="18" r="2"/><path d="M3 8h2.5M12.5 14H15M3.5 18H6"/></g>
+    <g transform="translate(120,110) scale(2.1)"><rect x="2.5" y="6" width="8" height="12" rx="1.5"/><rect x="13.5" y="6" width="8" height="12" rx="1.5"/></g>
+    <g transform="translate(240,110) scale(2.1)"><circle cx="6" cy="6" r="2.5"/><rect x="16" y="16" width="5" height="5" rx="1"/><path d="M6 10v6a2 2 0 0 0 2 2h6" stroke-dasharray="2.5 2.5"/></g>
+  </g>
+</svg>

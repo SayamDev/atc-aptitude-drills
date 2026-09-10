@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Reaction speed drill (rt style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 220px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:22px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:18px}
+  .stage{display:flex; align-items:center; gap:18px; min-height:132px}
+  .card{background:#fff; border:1px solid var(--rule); border-radius:4px; padding:14px 16px; display:flex; gap:10px}
+  .card.flashok{border-color:var(--good); box-shadow:0 0 0 2px var(--good)}
+  .card.flashno{border-color:var(--bad); box-shadow:0 0 0 2px var(--bad)}
+  .card svg{width:38px; height:38px; display:block}
+  .vs{color:var(--muted); font-size:13px; letter-spacing:.08em}
+  .answers{display:flex; gap:12px}
+  .answers button{font:600 16px/1 inherit; padding:16px 30px; border-radius:3px; border:1px solid var(--rule);
+                  background:#F7F8F7; cursor:pointer; min-width:150px}
+  .answers button:hover{background:#EDF0ED}
+  .answers button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .answers kbd{display:block; font:500 11px/1.6 ui-monospace,Menlo,monospace; color:#525C66; margin-top:4px}
+  .verdict{min-height:26px; font-size:15px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .card{background:#1b2229}
+  :where(:root[data-theme="dark"]) .answers button{background:#232b33}
+  :where(:root[data-theme="dark"]) .answers button:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .answers kbd{color:#a3b0bb}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Reaction speed drill</h1>
+    <p class="sub">Same or different? Answer as fast as you can without guessing.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <div class="stage">
+      <div class="card" id="left"></div>
+      <div class="vs">VS</div>
+      <div class="card" id="right"></div>
+    </div>
+    <div class="answers">
+      <button id="bsame">Same<kbd>F  or  ←</kbd></button>
+      <button id="bdiff">Different<kbd>J  or  →</kbd></button>
+    </div>
+    <p class="verdict" id="verdict">Press start, or just answer the pair above.</p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn primary" id="run">Start 3-minute run</button>
+      <label>Symbols
+        <select id="len">
+          <option value="3">Three</option>
+          <option value="4" selected>Four</option>
+          <option value="5">Five</option>
+        </select>
+      </label>
+      <label>Differences
+        <select id="mode">
+          <option value="obvious">Obvious</option>
+          <option value="mixed" selected>Mixed</option>
+          <option value="subtle">Subtle</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>trials</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-rt">—</b><span>mean reaction</span></div>
+        <div class="stat"><b id="s-best">—</b><span>fastest right</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>What actually helps</h2>
+      <ol class="tips">
+        <li>Rest a finger on each key before the pair appears. Most of your time is moving, not deciding.</li>
+        <li>Scan position by position, left to right, both cards at once. Stop the moment you find a difference.</li>
+        <li>"Same" always costs longer — you have to check every position. Expect it and don't panic.</li>
+        <li>After a mistake, take the next one at normal speed. Chasing it causes the second error.</li>
+        <li>Blink between trials, not during one.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+
+const SH = [
+  {k:'circle',   d:'<circle cx="50" cy="50" r="33"/>'},
+  {k:'square',   d:'<rect x="18" y="18" width="64" height="64" rx="5"/>'},
+  {k:'triangle', d:'<polygon points="50,16 86,84 14,84"/>'},
+  {k:'diamond',  d:'<polygon points="50,12 86,50 50,88 14,50"/>'},
+  {k:'cross',    d:'<polygon points="35,14 65,14 65,35 86,35 86,65 65,65 65,86 35,86 35,65 14,65 14,35 35,35"/>'}
+];
+const COL = ['#E13A2D','#1F6FB2','#7CC13F','#F4C13C','#7A3BB5'];
+const svg = e => '<svg viewBox="0 0 100 100" fill="'+COL[e.c]+'" aria-hidden="true">'+SH[e.s].d+'</svg>';
+
+let trial = null, shownAt = 0, locked = true, trials = [];
+let runEnd = 0, runTimer = null, gap = null;
+
+function makeTrial(){
+  const n = +$('#len').value, mode = $('#mode').value;
+  const a = [];
+  for(let i=0;i<n;i++) a.push({s:R(SH.length), c:R(COL.length)});
+  const same = Math.random() < 0.5;
+  const b = a.map(e => ({...e}));
+  if(!same){
+    const i = R(n);
+    const style = mode === 'obvious' ? 'shape'
+                : mode === 'subtle'  ? pick(['colour','swap'])
+                : pick(['shape','colour','swap','shape']);
+    if(style === 'shape'){
+      let s; do { s = R(SH.length); } while(s === b[i].s);
+      b[i].s = s;
+    } else if(style === 'colour'){
+      let c; do { c = R(COL.length); } while(c === b[i].c);
+      b[i].c = c;
+    } else {                                   // swap two neighbours that differ
+      const cands = [];
+      for(let k=0;k+1<n;k++) if(a[k].s !== a[k+1].s || a[k].c !== a[k+1].c) cands.push(k);
+      if(!cands.length){ let s; do { s = R(SH.length); } while(s === b[i].s); b[i].s = s; }
+      else { const k = pick(cands); [b[k], b[k+1]] = [b[k+1], b[k]]; }
+    }
+  }
+  return {a, b, same};
+}
+
+function show(){
+  trial = makeTrial();
+  $('#left').innerHTML  = trial.a.map(svg).join('');
+  $('#right').innerHTML = trial.b.map(svg).join('');
+  $('#left').className = 'card'; $('#right').className = 'card';
+  locked = false; shownAt = performance.now();
+}
+
+function respond(saidSame){
+  if(locked) return;
+  locked = true;
+  const rt = performance.now() - shownAt, ok = saidSame === trial.same;
+  trials.push({rt, ok, same:trial.same, saidSame});
+  const cls = ok ? 'flashok' : 'flashno';
+  $('#left').classList.add(cls); $('#right').classList.add(cls);
+  $('#verdict').textContent = ok ? Math.round(rt)+' ms'
+    : (trial.same ? 'They were the same.' : 'They differed.');
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  updateStats();
+  clearTimeout(gap);
+  gap = setTimeout(() => { if(!$('#summary').hidden) return; show(); }, ok ? 260 : 620);
+}
+
+function updateStats(){
+  const n = trials.length, right = trials.filter(t=>t.ok);
+  $('#s-done').textContent = n;
+  $('#s-acc').textContent = n ? Math.round(100*right.length/n)+'%' : '—';
+  $('#s-rt').textContent = right.length ? Math.round(right.reduce((a,t)=>a+t.rt,0)/right.length)+' ms' : '—';
+  $('#s-best').textContent = right.length ? Math.round(Math.min(...right.map(t=>t.rt)))+' ms' : '—';
+}
+
+$('#bsame').onclick = () => respond(true);
+$('#bdiff').onclick = () => respond(false);
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if(k === 'f' || e.key === 'ArrowLeft')  { e.preventDefault(); respond(true); }
+  if(k === 'j' || e.key === 'ArrowRight') { e.preventDefault(); respond(false); }
+});
+$('#len').onchange = () => { $('#summary').hidden = true; show(); };
+$('#mode').onchange = () => { $('#summary').hidden = true; show(); };
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  trials = []; updateStats();
+  $('#summary').hidden = true;
+  runEnd = performance.now() + 3*60*1000;
+  $('#run').textContent = 'Stop run';
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 30000);
+    if(left <= 0) endRun();
+  }, 200);
+  show();
+};
+
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; locked = true; clearTimeout(gap);
+  $('#run').textContent = 'Start 3-minute run';
+  $('#clock').textContent = 'ready'; $('#clock').classList.remove('low');
+  $('#verdict').textContent = '';
+
+  const n = trials.length, right = trials.filter(t=>t.ok), acc = n ? Math.round(100*right.length/n) : 0;
+  const rt = mean(right.map(t=>t.rt));
+  const half = Math.floor(right.length/2);
+  const early = mean(right.slice(0,half).map(t=>t.rt)), late = mean(right.slice(half).map(t=>t.rt));
+  const drift = (early && late) ? Math.round(late - early) : 0;
+  const sameRT = mean(right.filter(t=>t.same).map(t=>t.rt));
+  const diffRT = mean(right.filter(t=>!t.same).map(t=>t.rt));
+  const missed = trials.filter(t=>!t.ok && !t.same).length;   // said same, they differed
+  const false1 = trials.filter(t=>!t.ok && t.same).length;    // said different, they matched
+
+  let note;
+  if(!n) note = 'No trials recorded.';
+  else if(acc < 90) note = 'Accuracy of '+acc+'% is the thing to fix first. On this kind of test a wrong answer costs far more than the fraction of a second you saved — ease off about 10% and let the speed come back on its own.';
+  else if(drift > 60) note = 'You slowed by '+drift+' ms over the run. That is attention fading rather than ability — the fix is a fixed rhythm and blinking between trials, not trying harder.';
+  else if(drift < -60) note = 'You sped up by '+Math.abs(drift)+' ms as you went, with accuracy holding. That is a warm-up effect: do a minute of practice before the real test so you start warm.';
+  else note = 'Steady at '+Math.round(rt)+' ms and '+acc+'% across the whole run. That consistency is exactly what the test rewards.';
+
+  $('#summary').innerHTML =
+    '<h3>Three-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b>'+n+'</b><span>trials</span></div>' +
+      '<div><b class="ok">'+right.length+'</b><span>correct</span></div>' +
+      '<div><b class="no">'+(n-right.length)+'</b><span>errors</span></div>' +
+      '<div><b>'+(n?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(rt?Math.round(rt)+' ms':'—')+'</b><span>mean reaction</span></div>' +
+      '<div><b>'+(drift?(drift>0?'+':'')+drift+' ms':'—')+'</b><span>drift, 2nd half</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    (sameRT && diffRT ? '<p class="pace">Matching pairs took you '+Math.round(sameRT)+' ms, differing pairs '+
+      Math.round(diffRT)+' ms. A big gap means you are checking every position before committing to "same" — normal, and worth practising until the gap narrows.</p>' : '') +
+    ((missed || false1) ? '<p class="pace">Of your errors, '+missed+' were differences you missed and '+false1+
+      ' were matches you called different. '+(missed > false1
+        ? 'Missing differences means you are committing before finishing the scan.'
+        : 'Calling matches different means you are second-guessing what you already saw.')+'</p>' : '') +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => { $('#summary').hidden = true; trials = []; updateStats(); show(); };
+}
+
+show();
+
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

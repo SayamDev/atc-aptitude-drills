@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Free practice drills for air traffic controller aptitude tests: spatial orientation, monitoring, reaction speed, planning, numeracy and English." />
+    <meta name="color-scheme" content="light dark" />
+    <title>ATC Aptitude Drills</title>
+  </head>
+  <body>
+    <script>
+      /* Inline and synchronous on purpose: this has to run before the first paint,
+         or a candidate who chose light sees a dark flash on every navigation. */
+      (function () {
+        try {
+          var t = localStorage.getItem('atc-drills:theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.style.colorScheme = t;
+          }
+        } catch (e) { /* storage blocked: fall back to the system scheme */ }
+      })();
+    </script>
+    <div id="root"></div>
+    <noscript>These drills are interactive and need JavaScript enabled.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

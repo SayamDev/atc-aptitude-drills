@@ -1,0 +1,4 @@
+.verdict { min-height: 1.7em; margin: 0; font-weight: 600; text-align: center; }
+.verdict--good { color: var(--good); }
+.verdict--bad { color: var(--bad); }
+.verdict--neutral { color: var(--ink); }

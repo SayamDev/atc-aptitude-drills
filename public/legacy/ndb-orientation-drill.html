@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Spatial orientation drill (ndb style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B; --dial:#12181E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:1000px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:900px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 240px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:20px 18px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .dials{display:flex; gap:24px; justify-content:center; flex-wrap:wrap}
+  .dial{text-align:center}
+  .dial svg{width:150px; height:150px; background:var(--dial); border-radius:50%}
+  .dial p{margin:6px 0 0; font-size:12.5px; color:var(--muted); letter-spacing:.06em}
+  .answer{display:flex; gap:28px; justify-content:center; align-items:flex-start; flex-wrap:wrap; margin-top:18px}
+  .planes{display:grid; grid-template-columns:repeat(2, 64px); gap:8px}
+  .planes button{padding:6px; background:#fff; border:1px solid var(--rule); border-radius:3px; cursor:pointer}
+  .planes button svg{width:100%; height:auto; display:block}
+  .planes button[data-sel="1"]{box-shadow:0 0 0 3px var(--blue)}
+  .planes button.good{box-shadow:0 0 0 3px var(--good)}
+  .planes button.bad{box-shadow:0 0 0 3px var(--bad)}
+  .grid{display:grid; grid-template-columns:repeat(3, 58px); grid-template-rows:repeat(3, 58px); gap:5px}
+  .grid button{background:#F4F2F5; border:1px solid var(--rule); border-radius:3px; cursor:pointer;
+               font:600 13px/1 ui-monospace,Menlo,monospace; color:var(--muted)}
+  .grid button:hover{background:#EAE8EC}
+  .grid button[data-sel="1"]{box-shadow:0 0 0 3px var(--blue)}
+  .grid button.good{box-shadow:0 0 0 3px var(--good)}
+  .grid button.bad{box-shadow:0 0 0 3px var(--bad)}
+  .grid .ndb{display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid var(--rule); border-radius:3px}
+  .grid .ndb i{width:16px; height:16px; border-radius:50%; background:#E13A2D; display:block}
+  .cap{font-size:12px; color:var(--muted); text-align:center; margin:6px 0 0}
+  .hint{margin:14px auto 0; max-width:520px; text-align:left; font-size:14.5px; line-height:1.55;
+        background:#F2F5F8; border:1px solid #D5DFE8; border-radius:4px; padding:10px 14px}
+  .hint b{color:var(--blue)}
+  .hint:empty{display:none}
+  .grid button{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px}
+  .grid .dw{font-size:10.5px; font-weight:600; color:#525C66}
+  .opts{display:flex; gap:14px; flex-wrap:wrap; justify-content:center}
+  .optcard{padding:8px; background:#fff; border:1px solid var(--rule); border-radius:4px; cursor:pointer}
+  .optcard[data-sel="1"]{box-shadow:0 0 0 3px var(--blue)}
+  .optcard.good{box-shadow:0 0 0 3px var(--good)}
+  .optcard.bad{box-shadow:0 0 0 3px var(--bad)}
+  .optcard p{margin:6px 0 0; text-align:center; font:600 12px/1 ui-monospace,Menlo,monospace; color:var(--muted)}
+  .mini{display:grid; grid-template-columns:repeat(3, 28px); grid-template-rows:repeat(3, 28px); gap:3px}
+  .mini div{background:#F1EFF3; border-radius:2px; display:flex; align-items:center; justify-content:center}
+  .mini div.b{background:#fff}
+  .mini i{width:11px; height:11px; border-radius:50%; background:#E13A2D; display:block}
+  .mini svg{width:82%; height:82%; display:block}
+  .verdict{min-height:26px; font-size:15px; font-weight:600; margin:14px 0 0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .working{font-size:14.5px; margin:8px 0 0; text-align:center; color:var(--ink)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px; margin-top:16px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn[disabled]{opacity:.45; cursor:default}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{margin-top:16px}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .planes button{background:#1b2229}
+  :where(:root[data-theme="dark"]) .grid button{background:#262f38}
+  :where(:root[data-theme="dark"]) .grid button:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .grid .ndb{background:#1b2229}
+  :where(:root[data-theme="dark"]) .hint{background:#1d2833; border:1px solid #33414f}
+  :where(:root[data-theme="dark"]) .grid .dw{color:#a3b0bb}
+  :where(:root[data-theme="dark"]) .optcard{background:#1b2229}
+  :where(:root[data-theme="dark"]) .mini div{background:#262f38}
+  :where(:root[data-theme="dark"]) .mini div.b{background:#1b2229}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Spatial orientation drill</h1>
+    <p class="sub">Pick the aircraft flying the GYRO heading, then the cell where it sits relative to the beacon.</p>
+    <div class="clock" id="clock">0.0s</div>
+  </header>
+
+  <main class="panel">
+    <div class="dials">
+      <div class="dial"><div id="gyro"></div><p>GYRO — heading</p></div>
+      <div class="dial"><div id="rbi"></div><p>RBI — needle points to the beacon</p></div>
+    </div>
+
+    <p class="hint" id="hint"></p>
+
+    <div class="answer" id="answer"></div>
+
+    <p class="verdict" id="verdict"></p>
+    <p class="working" id="working"></p>
+    <section id="summary" hidden></section>
+
+    <div class="controls">
+      <button class="btn primary" id="submit" disabled>Submit</button>
+      <button class="btn" id="helpbtn">Talk me through it</button>
+      <button class="btn" id="run">Start 3-minute run</button>
+      <label><input type="checkbox" id="exam"> Exam conditions</label>
+      <label>Difficulty
+        <select id="diff">
+          <option value="learn" selected>Learning</option>
+          <option value="easy">Easy</option>
+          <option value="mixed">Standard</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>attempted</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>both right</span></div>
+        <div class="stat"><b id="s-avg">—</b><span>average time</span></div>
+        <div class="stat"><b id="s-cell">—</b><span>cell errors</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>The three-step routine</h2>
+      <ol class="tips">
+        <li>Read the GYRO. That's your heading, and it picks the aircraft — do this first, always.</li>
+        <li>Read the RBI needle as an angle from the top. That's how far right of the nose the beacon lies.</li>
+        <li>Add them. Heading + needle = the direction of the beacon from you.</li>
+        <li>Flip it 180°. You sit on the opposite side of the beacon — that's the cell.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+const norm = d => ((d % 360) + 360) % 360;
+const NAMES = {0:'north',45:'north-east',90:'east',135:'south-east',180:'south',225:'south-west',270:'west',315:'north-west'};
+const SHORT = {0:'N',45:'NE',90:'E',135:'SE',180:'S',225:'SW',270:'W',315:'NW'};
+const REL = {0:'straight ahead of you',45:'ahead and to your right',90:'on your right',
+             135:'behind and to your right',180:'behind you',225:'behind and to your left',
+             270:'on your left',315:'ahead and to your left'};
+
+/* cell 0..8 in reading order; 4 is the beacon */
+const CELL_DIR = {0:315, 1:0, 2:45, 3:270, 5:90, 6:225, 7:180, 8:135};
+const DIR_CELL = Object.fromEntries(Object.entries(CELL_DIR).map(([c,d]) => [d, +c]));
+const CELL_NO  = {0:1, 1:2, 2:3, 3:4, 5:5, 6:6, 7:7, 8:8};
+
+/* ---------- dial drawing ---------- */
+function ring(inner){
+  let t = '<circle cx="100" cy="100" r="96" fill="none" stroke="#2B3742" stroke-width="3"/>';
+  for(let a=0;a<360;a+=15){
+    const long = a % 45 === 0, r1 = long ? 74 : 82;
+    t += '<line x1="100" y1="'+(100-92)+'" x2="100" y2="'+(100-r1)+'" stroke="#8A97A3" stroke-width="'+(long?3:1.5)+
+         '" transform="rotate('+a+' 100 100)"/>';
+  }
+  return t + inner;
+}
+function letters(offset){
+  let t = '';
+  [['N',0],['E',90],['S',180],['W',270]].forEach(([ch,a]) => {
+    const rad = (a - offset - 90) * Math.PI/180;
+    const x = 100 + Math.cos(rad)*58, y = 100 + Math.sin(rad)*58;
+    t += '<text x="'+x.toFixed(1)+'" y="'+(y+7).toFixed(1)+'" text-anchor="middle" fill="#EAF0F5" '+
+         'font-family="ui-monospace,Menlo,monospace" font-size="24" font-weight="600">'+ch+'</text>';
+  });
+  return t;
+}
+const PLANE = 'M0,-30 L7,-8 L7,10 L26,22 L26,29 L7,24 L7,34 L13,40 L13,45 L0,41 L-13,45 L-13,40 L-7,34 L-7,24 L-26,29 L-26,22 L-7,10 L-7,-8 Z';
+
+function gyroSVG(heading){
+  const card = '<g transform="rotate('+(-heading)+' 100 100)">'+ring('')+letters(0)+'</g>';
+  return '<svg viewBox="0 0 200 200">' + card +
+    '<polygon points="100,14 92,30 108,30" fill="#F4C13C"/>' +
+    '<g transform="translate(100,104) scale(0.85)" fill="#EAF0F5"><path d="'+PLANE+'"/></g>' +
+    '</svg>';
+}
+function rbiSVG(rb){
+  return '<svg viewBox="0 0 200 200">' + ring('') + letters(0) +
+    '<g transform="rotate('+rb+' 100 100)">' +
+      '<line x1="100" y1="100" x2="100" y2="26" stroke="#F4C13C" stroke-width="6"/>' +
+      '<polygon points="100,18 92,34 108,34" fill="#F4C13C"/>' +
+      '<line x1="100" y1="100" x2="100" y2="170" stroke="#4C93C4" stroke-width="6" stroke-linecap="round"/>' +
+    '</g>' +
+    '<circle cx="100" cy="100" r="7" fill="#EAF0F5"/>' +
+    '<g transform="translate(100,100) scale(0.4)" fill="#5C6773" opacity="0.9"><path d="'+PLANE+'"/></g>' +
+    '</svg>';
+}
+const planeSVG = h => '<svg viewBox="0 0 100 100" fill="currentColor"><g transform="translate(50,50) rotate('+h+') scale(0.95)"><path d="'+PLANE+'"/></g></svg>';
+
+/* ---------- question ---------- */
+let Q = null, selPlane = -1, selCell = -1, selOpt = -1, t0 = 0, tick = null, answered = false, helped = false;
+const exam = () => $('#exam').checked;
+let runEnd = 0, runTimer = null;
+const stats = {done:0, right:0, times:[], cellOnly:0, planeOnly:0};
+
+function makeQ(){
+  const mode = $('#diff').value;
+  const heading = mode === 'learn' ? pick([0,90,180,270]) : R(8)*45;
+  const rb = (mode === 'learn' || mode === 'easy') ? pick([0,90,180,270]) : R(8)*45;
+  const mb = norm(heading + rb);
+  const cell = DIR_CELL[norm(mb + 180)];
+  const spread = mode === 'learn' ? [90,180,270] : mode === 'easy' ? [90,135,180]
+               : mode === 'hard' ? [45,45,315] : [45,90,180];
+  const opts = [heading];
+  for(const d of spread){ const h = norm(heading + d); if(!opts.includes(h)) opts.push(h); }
+  while(opts.length < 4){ const h = R(8)*45; if(!opts.includes(h)) opts.push(h); }
+  for(let i=opts.length-1;i>0;i--){ const j=R(i+1); [opts[i],opts[j]]=[opts[j],opts[i]]; }
+  return {heading, rb, mb, cell, opts, planeIx:opts.indexOf(heading)};
+}
+
+function miniGrid(cell, heading){
+  return '<div class="mini">' + [0,1,2,3,4,5,6,7,8].map(i =>
+    i === 4 ? '<div class="b"><i></i></div>'
+    : '<div>' + (i === cell ? planeSVG(heading) : '') + '</div>').join('') + '</div>';
+}
+
+function examOptions(){
+  const wrongCell = DIR_CELL[Q.mb];                       // the classic un-flipped trap
+  const other = [0,1,2,3,5,6,7,8].filter(c => c !== Q.cell && c !== wrongCell);
+  const cards = [
+    {cell:Q.cell,    heading:Q.heading},
+    {cell:wrongCell, heading:Q.heading},
+    {cell:Q.cell,    heading:norm(Q.heading+180)},
+    {cell:pick(other), heading:norm(Q.heading + pick([90,270]))}
+  ];
+  for(let i=cards.length-1;i>0;i--){ const j=R(i+1); [cards[i],cards[j]]=[cards[j],cards[i]]; }
+  return cards;
+}
+
+function render(){
+  const ex = exam();
+  const mode = $('#diff').value, words = !ex && (mode === 'learn' || mode === 'easy');
+  $('#helpbtn').hidden = ex;
+  $('#hint').innerHTML = (!ex && mode === 'learn')
+    ? 'The gyro says you are flying <b>'+NAMES[Q.heading]+'</b>. The needle says the beacon is <b>'+
+      REL[Q.rb]+'</b>.'
+    : '';
+  $('#gyro').innerHTML = gyroSVG(Q.heading);
+  $('#rbi').innerHTML  = rbiSVG(Q.rb);
+
+  if(ex){
+    Q.cards = examOptions();
+    $('#answer').innerHTML = '<div class="opts">' + Q.cards.map((c,i) =>
+      '<div><div class="optcard" data-o="'+i+'" data-sel="0" role="button" tabindex="0" '+
+      'aria-label="option '+(i+1)+'">'+miniGrid(c.cell, c.heading)+'</div><p>'+(i+1)+'</p></div>').join('') +
+      '</div>';
+    $('#answer').querySelectorAll('.optcard').forEach(b => b.onclick = () => {
+      if(answered) return;
+      selOpt = +b.dataset.o;
+      $('#answer').querySelectorAll('.optcard').forEach(x => x.dataset.sel = x === b ? '1' : '0');
+      $('#submit').disabled = false;
+    });
+    return;
+  }
+
+  $('#answer').innerHTML =
+    '<div><h2 style="text-align:center">Which aircraft?</h2><div class="planes" id="planes"></div></div>' +
+    '<div><h2 style="text-align:center">Where is it?</h2><div class="grid" id="grid"></div>' +
+    '<p class="cap">Red dot = the beacon</p></div>';
+
+  $('#planes').innerHTML = Q.opts.map((h,i) =>
+    '<button data-i="'+i+'" data-sel="0" aria-label="heading option '+(i+1)+'">'+planeSVG(h)+'</button>').join('');
+  $('#planes').querySelectorAll('button').forEach(b => b.onclick = () => {
+    if(answered) return;
+    selPlane = +b.dataset.i;
+    $('#planes').querySelectorAll('button').forEach(x => x.dataset.sel = x === b ? '1' : '0');
+    $('#submit').disabled = selPlane < 0 || selCell < 0;
+  });
+  $('#grid').innerHTML = [0,1,2,3,4,5,6,7,8].map(i => i === 4
+    ? '<div class="ndb"><i></i></div>'
+    : '<button data-c="'+i+'" data-sel="0"><span>'+CELL_NO[i]+'</span>'+
+      (words ? '<span class="dw">'+SHORT[CELL_DIR[i]]+'</span>' : '')+'</button>').join('');
+  $('#grid').querySelectorAll('button').forEach(b => b.onclick = () => {
+    if(answered) return;
+    selCell = +b.dataset.c;
+    $('#grid').querySelectorAll('button').forEach(x => x.dataset.sel = x === b ? '1' : '0');
+    $('#submit').disabled = selPlane < 0 || selCell < 0;
+  });
+}
+
+function newQ(){
+  Q = makeQ(); selPlane = -1; selCell = -1; selOpt = -1; answered = false; helped = false;
+  render();
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#working').textContent = '';
+  $('#summary').hidden = true;
+  $('#submit').disabled = true; $('#submit').textContent = 'Submit';
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function submit(){
+  if(answered) return;
+  answered = true;
+  clearInterval(tick);
+  const secs = (performance.now()-t0)/1000;
+  let pOK, cOK;
+  if(exam()){
+    const c = Q.cards[selOpt];
+    pOK = c.heading === Q.heading; cOK = c.cell === Q.cell;
+  } else {
+    pOK = selPlane === Q.planeIx; cOK = selCell === Q.cell;
+  }
+  const ok = pOK && cOK;
+  if(!helped){ stats.done++; stats.times.push(secs); if(ok) stats.right++; }
+  if(!helped && !ok){ if(pOK) stats.cellOnly++; else if(cOK) stats.planeOnly++; }
+
+  if(exam()){
+    updateStats();
+    setTimeout(() => { if($('#summary').hidden) newQ(); }, 120);
+    return;
+  }
+
+  $('#planes').querySelectorAll('button').forEach(b => {
+    const i = +b.dataset.i;
+    if(i === Q.planeIx) b.classList.add('good');
+    else if(i === selPlane) b.classList.add('bad');
+  });
+  $('#grid').querySelectorAll('button').forEach(b => {
+    const c = +b.dataset.c;
+    if(c === Q.cell) b.classList.add('good');
+    else if(c === selCell) b.classList.add('bad');
+  });
+
+  $('#verdict').textContent = ok ? 'Both right — '+secs.toFixed(1)+'s'
+    : (pOK ? 'Right aircraft, wrong cell.' : cOK ? 'Right cell, wrong aircraft.' : 'Both wrong.');
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  $('#working').textContent =
+    'Heading ' + String(Q.heading).padStart(3,'0') + '° + needle ' + String(Q.rb).padStart(3,'0') +
+    '° = ' + String(Q.mb).padStart(3,'0') + '°, so the beacon is ' + NAMES[Q.mb] +
+    ' of you. Flip it: you are ' + NAMES[norm(Q.mb+180)] + ' of the beacon — cell ' + CELL_NO[Q.cell] + '.';
+  $('#submit').textContent = 'Next'; $('#submit').disabled = false;
+  updateStats();
+}
+
+function updateStats(){
+  $('#s-done').textContent = stats.done;
+  $('#s-acc').textContent = stats.done ? Math.round(100*stats.right/stats.done)+'%' : '—';
+  const t = stats.times;
+  $('#s-avg').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  $('#s-cell').textContent = stats.done ? stats.cellOnly : '—';
+}
+
+function walkLine(){
+  const clicks = norm(Q.rb + 180) / 45;      // where the tail sits, in 45 degree steps
+  const myBox = CELL_NO[Q.cell];
+  const rule = '<br><span style="color:#6C7681">Every time: the <b>side</b> the tail leans gives the '+
+               'direction (right = clockwise, left = anticlockwise) and the <b>height</b> gives the '+
+               'number (high = 1, across = 2, low = 3). Straight up = stay put, straight down = jump across.'+
+               '</span>';
+  if(clicks === 0)
+    return 'The blue tail points <b>straight up</b>, so you do not move at all \u2014 <b>box '+myBox+'</b>.'+rule;
+  if(clicks === 4)
+    return 'The blue tail points <b>straight down</b>, so jump through the middle to the opposite box '+
+           '\u2014 <b>box '+myBox+'</b>.'+rule;
+  const cw = clicks < 4, steps = cw ? clicks : 8 - clicks, dir = cw ? 45 : -45;
+  const path = [SHORT[Q.heading]];
+  for(let i=1;i<=steps;i++) path.push(SHORT[norm(Q.heading + dir*i)]);
+  const height = steps === 1 ? 'high up' : steps === 2 ? 'straight across' : 'low down';
+  return 'The blue tail is pointing <b>'+height+', to the '+(cw?'right':'left')+'</b>.<br>' +
+         '\u2022 '+height+' \u2192 <b>'+steps+' box'+(steps===1?'':'es')+'</b><br>' +
+         '\u2022 to the '+(cw?'right':'left')+' \u2192 <b>'+(cw?'clockwise':'anticlockwise')+'</b><br>' +
+         'So from '+SHORT[Q.heading]+', walk '+steps+' '+(cw?'clockwise':'anticlockwise')+': '+
+         path.join(' \u2192 ')+'. That is <b>box '+myBox+'</b>.'+rule;
+}
+
+$('#helpbtn').onclick = () => {
+  if(!Q) return;
+  if(!answered) helped = true;   // only costs you the stat if you ask before answering
+  const deg = d => String(d).padStart(3,'0')+'\u00B0';
+  const sum = Q.heading + Q.rb;
+  const sumLine = sum >= 360
+    ? deg(Q.heading)+' + '+deg(Q.rb)+' = '+sum+'\u00B0, over 360 so take 360 off = <b>'+deg(Q.mb)+'</b>'
+    : deg(Q.heading)+' + '+deg(Q.rb)+' = <b>'+deg(Q.mb)+'</b>';
+  const beaconBox = CELL_NO[DIR_CELL[Q.mb]];
+  const myBox = CELL_NO[Q.cell];
+  $('#hint').innerHTML =
+    '<b>1. Pick the aircraft.</b> The gyro reads '+deg(Q.heading)+' \u2014 '+NAMES[Q.heading]+
+      '. Choose the plane whose nose points '+NAMES[Q.heading]+
+      ' (north is up the screen). The needle has nothing to do with this bit.<br><br>' +
+    '<b>2. Read the needle.</b> It sits at '+deg(Q.rb)+', so the beacon is '+REL[Q.rb]+'.<br><br>' +
+    '<b>3. Add them.</b> '+sumLine+', so the beacon is <b>'+NAMES[Q.mb]+'</b> of you.<br><br>' +
+    '<b>4. Flip it.</b> '+NAMES[Q.mb]+' is box '+beaconBox+', and 9 \u2212 '+beaconBox+' = <b>'+myBox+
+      '</b>. You are '+NAMES[norm(Q.mb+180)]+' of the beacon \u2014 box '+myBox+'.<br><br>' +
+    '<b>Faster route \u2014 no adding.</b> Read the blue tail, not the amber head: the tail does the '+
+      'flipping for you. Put your finger on the box for your heading, <b>'+SHORT[Q.heading]+
+      ' (box '+CELL_NO[DIR_CELL[Q.heading]]+')</b>, then walk round the ring.<br>' + walkLine();
+};
+
+$('#submit').onclick = () => { if(answered) newQ(); else submit(); };
+$('#diff').onchange = newQ;
+$('#exam').onchange = () => {
+  if(exam()){
+    if($('#diff').value === 'learn') $('#diff').value = 'mixed';
+    $('#hint').innerHTML = ''; $('#working').textContent = ''; $('#verdict').textContent = '';
+    if(!runEnd) $('#run').click(); else newQ();
+  } else {
+    if(runEnd) $('#run').click(); else newQ();
+  }
+};
+document.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){ if(answered) newQ(); else if(!$('#submit').disabled) submit(); }
+});
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  stats.done = 0; stats.right = 0; stats.times = []; stats.cellOnly = 0; stats.planeOnly = 0;
+  updateStats();
+  runEnd = performance.now() + 3*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 30000);
+    if(left <= 0) endRun();
+  }, 200);
+  newQ();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; answered = true;
+  $('#run').textContent = 'Start 3-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  const acc = stats.done ? Math.round(100*stats.right/stats.done) : 0;
+  const avg = stats.times.length ? stats.times.reduce((a,b)=>a+b,0)/stats.times.length : 0;
+  const wrong = stats.done - stats.right;
+
+  let note;
+  if(!stats.done) note = 'Nothing attempted.';
+  else if(stats.cellOnly > stats.planeOnly && stats.cellOnly > 1)
+    note = 'Most of your errors were the cell, not the aircraft — you are reading the instruments fine but losing the 180° flip. Say "beacon is north-east of me, so I am south-west of it" out loud on every question until it sticks.';
+  else if(stats.planeOnly > stats.cellOnly && stats.planeOnly > 1)
+    note = 'Most of your errors were the aircraft, not the cell. That is the GYRO read, not the geometry — check the heading against the top index before you look at anything else.';
+  else if(avg > 12)
+    note = 'Averaging '+avg.toFixed(1)+'s a question. The routine is right but slow — the addition is the part to make automatic, so drill the eight headings until heading-plus-needle needs no thought.';
+  else note = acc >= 80
+    ? 'Strong: '+acc+'% at '+avg.toFixed(1)+'s each. Move up a difficulty.'
+    : 'Accuracy '+acc+'% at '+avg.toFixed(1)+'s. Slow down slightly — on this test a wrong answer wipes out the time you saved.';
+
+  $('#summary').innerHTML =
+    '<h3>Three-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.right+'</b><span>both right</span></div>' +
+      '<div><b class="no">'+wrong+'</b><span>wrong</span></div>' +
+      '<div><b>'+stats.done+'</b><span>attempted</span></div>' +
+      '<div><b>'+(stats.done?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(avg?avg.toFixed(1)+'s':'—')+'</b><span>per question</span></div>' +
+      '<div><b>'+stats.cellOnly+' / '+stats.planeOnly+'</b><span>cell / aircraft slips</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => newQ();
+}
+
+newQ();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

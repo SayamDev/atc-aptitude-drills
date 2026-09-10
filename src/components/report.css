@@ -1,0 +1,17 @@
+.report { width: 100%; }
+.report__scores {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  margin: 0 0 var(--space-4);
+}
+.report__scores div { margin: 0; }
+.report__scores dt { font-size: var(--step--1); color: var(--ink-muted); order: 2; }
+.report__scores dd {
+  margin: 0; order: 1;
+  font: 600 1.6rem/1.15 var(--mono); font-variant-numeric: tabular-nums;
+}
+.report__scores > div { display: flex; flex-direction: column; }
+.report__v--good { color: var(--good); }
+.report__v--bad { color: var(--bad); }
+.report__advice { font-size: var(--step--1); }
+.report__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }

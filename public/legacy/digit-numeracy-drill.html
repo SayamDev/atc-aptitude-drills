@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Numeracy drill (digitChallenge style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 240px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:22px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:18px}
+  .eq{display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+      font:600 30px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .slot{width:52px; height:60px; border:2px solid var(--rule); border-radius:4px; background:#FAFBFA;
+        display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .slot.on{border-color:var(--blue); box-shadow:0 0 0 2px rgba(31,111,178,.18)}
+  .slot.filled{background:#fff; border-color:var(--ink)}
+  .eq .op{color:var(--muted); padding:0 2px}
+  .eq .res{color:var(--blue)}
+  .keypad{display:grid; grid-template-columns:repeat(5, 58px); gap:8px}
+  .keypad button{font:600 20px/1 ui-monospace,Menlo,monospace; padding:14px 0; border:1px solid var(--rule);
+                 border-radius:3px; background:#F7F8F7; cursor:pointer}
+  .keypad button:hover{background:#EDF0ED}
+  .keypad button[disabled]{opacity:.3; cursor:default}
+  .keypad button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .keypad button.wide{grid-column:span 2; font-size:14px}
+  .verdict{min-height:26px; font-size:15px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .note{margin:0; font-size:13px; color:var(--muted)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(94px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .slot{background:#232b33}
+  :where(:root[data-theme="dark"]) .slot.filled{background:#1b2229}
+  :where(:root[data-theme="dark"]) .keypad button{background:#232b33}
+  :where(:root[data-theme="dark"]) .keypad button:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Numeracy drill</h1>
+    <p class="sub">Fill the boxes with digits so the sum comes out right.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <div class="eq" id="eq"></div>
+    <p class="note" id="note">Digits 1 to 9, each used only once in an equation.</p>
+    <div class="keypad" id="keypad"></div>
+    <p class="verdict" id="verdict"></p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn primary" id="run">Start 6-minute run</button>
+      <button class="btn" id="skip">Skip</button>
+      <button class="btn" id="hint">Hint</button>
+      <label>Start at
+        <select id="lvl">
+          <option value="1">Level 1</option>
+          <option value="2" selected>Level 2</option>
+          <option value="3">Level 3</option>
+          <option value="4">Level 4</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-solved">0</b><span>solved</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-time">—</b><span>seconds each</span></div>
+        <div class="stat"><b id="s-lvl">2</b><span>level</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>How to solve them fast</h2>
+      <ol class="tips">
+        <li>Times before plus. Work out the multiplication part first, always.</li>
+        <li>Start from the biggest chunk — it has the fewest options.</li>
+        <li>Use the last digit as a filter: 7 × 3 ends in 1, so the rest must supply the rest.</li>
+        <li>Odd or even? An odd total cannot come from two even parts.</li>
+        <li>Remember each digit can only appear once. That kills a lot of near misses.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+
+/* ---------- equation templates, by level ---------- */
+const TEMPLATES = {
+  1: [['S','+','S'], ['S','-','S'], ['S','*','S']],
+  2: [['S','+','S','+','S'], ['S','*','S','+','S'], ['S','+','S','*','S'],
+      ['S','*','S','-','S'], ['S','-','S','+','S']],
+  3: [['S','*','S','+','S','*','S'], ['S','*','S','-','S','+','S'],
+      ['S','+','S','*','S','-','S'], ['(','S','+','S',')','*','S','-','S'],
+      ['S','*','(','S','+','S',')','-','S']],
+  4: [['S','*','S','+','S','*','S','-','S'], ['(','S','+','S',')','*','S','-','S','*','S'],
+      ['S','*','S','-','S','*','S','+','S'], ['(','S','-','S',')','*','S','+','S','*','S']]
+};
+
+/* shunting-yard so × really does bind tighter than + */
+function evaluate(tokens){
+  const prec = t => (t === '*' ? 2 : (t === '+' || t === '-') ? 1 : 0);
+  const out = [], ops = [];
+  for(const t of tokens){
+    if(typeof t === 'number') out.push(t);
+    else if(t === '(') ops.push(t);
+    else if(t === ')'){ while(ops.length && ops[ops.length-1] !== '(') out.push(ops.pop()); ops.pop(); }
+    else { while(ops.length && prec(ops[ops.length-1]) >= prec(t)) out.push(ops.pop()); ops.push(t); }
+  }
+  while(ops.length) out.push(ops.pop());
+  const st = [];
+  for(const t of out){
+    if(typeof t === 'number'){ st.push(t); continue; }
+    const b = st.pop(), a = st.pop();
+    st.push(t === '+' ? a+b : t === '-' ? a-b : a*b);
+  }
+  return st[0];
+}
+const fill = (tmpl, digits) => { let k = 0; return tmpl.map(t => t === 'S' ? digits[k++] : t); };
+
+function makeQ(level){
+  for(let tries = 0; tries < 500; tries++){
+    const tmpl = pick(TEMPLATES[level]);
+    const n = tmpl.filter(t => t === 'S').length;
+    const pool = [1,2,3,4,5,6,7,8,9];
+    const digits = [];
+    while(digits.length < n) digits.push(pool.splice(R(pool.length),1)[0]);
+    const value = evaluate(fill(tmpl, digits));
+    if(!Number.isInteger(value) || value < 2 || value > 150) continue;
+    return {tmpl, n, target:value, level, example:digits};
+  }
+  return null;
+}
+
+/* any set of distinct digits that makes the equation true is accepted */
+function isCorrect(Q, entered){
+  if(entered.some(d => d === null)) return false;
+  if(new Set(entered).size !== entered.length) return false;
+  return evaluate(fill(Q.tmpl, entered)) === Q.target;
+}
+
+/* ---------- interface ---------- */
+let Q = null, entered = [], cursor = 0, t0 = 0, tick = null, answered = false;
+let level = 2, streak = 0, runEnd = 0, runTimer = null;
+const stats = {done:0, right:0, times:[]};
+
+function drawEq(){
+  let k = 0;
+  const parts = Q.tmpl.map(t => {
+    if(t === 'S'){
+      const i = k++;
+      return '<div class="slot'+(entered[i] !== null ? ' filled' : '')+(i === cursor ? ' on' : '')+
+             '" data-s="'+i+'">'+(entered[i] !== null ? entered[i] : '')+'</div>';
+    }
+    if(t === '*') return '<span class="op">&times;</span>';
+    if(t === '(' || t === ')') return '<span class="op">'+t+'</span>';
+    return '<span class="op">'+t+'</span>';
+  });
+  $('#eq').innerHTML = parts.join('') +
+    '<span class="op">=</span><span class="res">'+Q.target+'</span>';
+  $('#eq').querySelectorAll('.slot').forEach(el => el.onclick = () => { cursor = +el.dataset.s; drawEq(); });
+  $('#keypad').querySelectorAll('button[data-d]').forEach(b => {
+    b.disabled = entered.includes(+b.dataset.d);
+  });
+}
+
+function drawKeypad(){
+  const k = $('#keypad'); k.innerHTML = '';
+  for(let d=1; d<=9; d++){
+    const b = document.createElement('button');
+    b.textContent = d; b.dataset.d = d;
+    b.onclick = () => put(d);
+    k.appendChild(b);
+  }
+  const c = document.createElement('button'); c.textContent = 'Clear'; c.className = 'wide';
+  c.onclick = () => { entered = entered.map(() => null); cursor = 0; drawEq(); };
+  k.appendChild(c);
+}
+
+function put(d){
+  if(answered || !Q) return;
+  if(entered.includes(d)) return;
+  entered[cursor] = d;
+  const next = entered.findIndex(v => v === null);
+  cursor = next === -1 ? cursor : next;
+  drawEq();
+  if(!entered.includes(null)) check();
+}
+
+function check(){
+  answered = true; clearInterval(tick);
+  const secs = (performance.now()-t0)/1000;
+  const ok = isCorrect(Q, entered);
+  stats.done++; stats.times.push(secs);
+  if(ok){
+    stats.right++; streak++;
+    if(streak >= 2 && level < 4){ level++; streak = 0; }
+    $('#verdict').textContent = 'Correct — '+secs.toFixed(1)+'s';
+    $('#verdict').className = 'verdict right';
+  } else {
+    streak = 0;
+    if(level > 1) level--;
+    $('#verdict').innerHTML = 'That gives <b>'+evaluate(fill(Q.tmpl, entered))+'</b>, not '+Q.target+
+      '. One that works: '+Q.example.join(', ')+'.';
+    $('#verdict').className = 'verdict wrong';
+  }
+  updateStats();
+  setTimeout(() => { if($('#summary').hidden) newQ(); }, ok ? 700 : 2600);
+}
+
+function newQ(){
+  const q = makeQ(level);
+  if(!q){ $('#verdict').textContent = 'Could not build one — press Skip.'; return; }
+  Q = q; entered = Array(q.n).fill(null); cursor = 0; answered = false;
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#summary').hidden = true;
+  drawEq();
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function updateStats(){
+  $('#s-solved').textContent = stats.right;
+  $('#s-acc').textContent = stats.done ? Math.round(100*stats.right/stats.done)+'%' : '—';
+  const t = stats.times;
+  $('#s-time').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  $('#s-lvl').textContent = level;
+}
+
+$('#skip').onclick = () => { if(!answered && Q){ stats.done++; streak = 0; } newQ(); };
+$('#hint').onclick = () => {
+  if(!Q || answered) return;
+  const firstEmpty = entered.findIndex(v => v === null);
+  if(firstEmpty < 0) return;
+  $('#verdict').innerHTML = 'Try <b>'+Q.example[firstEmpty]+'</b> in box '+(firstEmpty+1)+
+    ' — one full answer is '+Q.example.join(', ')+'.';
+  $('#verdict').className = 'verdict';
+};
+$('#lvl').onchange = () => { level = +$('#lvl').value; streak = 0; newQ(); };
+document.addEventListener('keydown', e => {
+  if(e.key >= '1' && e.key <= '9') put(+e.key);
+  if(e.key === 'Backspace'){ entered[cursor] = null; drawEq(); }
+});
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  stats.done = 0; stats.right = 0; stats.times = []; streak = 0;
+  level = +$('#lvl').value; updateStats();
+  runEnd = performance.now() + 6*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 60000);
+    if(left <= 0) endRun();
+  }, 200);
+  newQ();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; answered = true;
+  $('#run').textContent = 'Start 6-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  const acc = stats.done ? Math.round(100*stats.right/stats.done) : 0;
+  const t = stats.times, avg = t.length ? t.reduce((a,b)=>a+b,0)/t.length : 0;
+
+  let note;
+  if(!stats.done) note = 'Nothing attempted.';
+  else if(avg > 25) note = 'At '+avg.toFixed(0)+'s an equation you are searching rather than solving. Work the multiplication out first and the search shrinks.';
+  else if(acc < 60) note = 'Accuracy '+acc+'% — most likely order of operations. Multiply before you add, every time.';
+  else note = stats.right+' solved at '+avg.toFixed(0)+'s each, reaching level '+level+'. Solid.';
+
+  $('#summary').innerHTML =
+    '<h3>Six-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.right+'</b><span>solved</span></div>' +
+      '<div><b class="no">'+(stats.done-stats.right)+'</b><span>wrong</span></div>' +
+      '<div><b>'+(stats.done?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(avg?avg.toFixed(0)+'s':'—')+'</b><span>each</span></div>' +
+      '<div><b>'+level+'</b><span>level reached</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => newQ();
+}
+
+drawKeypad();
+newQ();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

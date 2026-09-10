@@ -1,0 +1,62 @@
+.log__head { margin-bottom: var(--space-5); }
+.log__lede { font-size: var(--step-1); color: var(--ink-muted); }
+
+.log__empty { padding: var(--space-5) var(--space-4); }
+.log__empty .btn { display: inline-block; text-decoration: none; line-height: var(--tap); padding-block: 0; }
+
+.log__totals, .log__drill { padding: var(--space-4); margin-bottom: var(--space-4); }
+
+/* Figures are the point of this page, so they get the tabular mono treatment
+   the drills use for their own scores. */
+.log__figures {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  margin: 0 0 var(--space-4);
+}
+.log__figures > div { display: flex; flex-direction: column; margin: 0; }
+.log__figures dt { order: 2; font-size: var(--step--1); color: var(--ink-muted); }
+.log__figures dd {
+  order: 1; margin: 0;
+  font: 600 1.5rem/1.15 var(--mono); font-variant-numeric: tabular-nums;
+}
+.log__soft { font-size: var(--step-0) !important; font-weight: 500 !important; color: var(--ink-muted); }
+.log__up { color: var(--good); }
+.log__down { color: var(--bad); }
+
+.log__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+/* accent-ink is the light/dark-aware ink token: 7.0:1 on light --bad, 7.8:1 on dark. */
+.btn--danger { background: var(--bad); border-color: var(--bad); color: var(--accent-ink); }
+
+.log__drill-head {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.log__drill-head h2 { margin: 0; }
+.log__drill-head .spark { flex: 1 1 120px; min-width: 90px; max-width: 220px; margin-left: auto; }
+.log__code {
+  font: var(--step--1) var(--mono); color: var(--accent-ink); background: var(--accent);
+  padding: 2px var(--space-2); border-radius: var(--radius);
+}
+
+/* A wide table scrolls inside its own box; the page never scrolls sideways. */
+.log__scroll { overflow-x: auto; margin-bottom: var(--space-3); }
+.log__table {
+  width: 100%; border-collapse: collapse;
+  font-size: var(--step--1); font-variant-numeric: tabular-nums;
+}
+.log__table th, .log__table td {
+  padding: var(--space-2) var(--space-3); text-align: right;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.log__table thead th {
+  color: var(--ink-muted); font-weight: 500; text-align: right;
+  text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--step--1);
+}
+.log__table thead th:first-child, .log__table tbody th { text-align: left; }
+.log__table tbody th { font-weight: 500; color: var(--ink-muted); font-family: var(--mono); }
+.log__table td { font-family: var(--mono); }
+.log__table tbody tr:last-child th, .log__table tbody tr:last-child td { border-bottom: 0; }
+.log__note { font-family: var(--font) !important; color: var(--ink-muted); text-align: left !important; }
+
+/* The scroll box takes focus (see Logbook.tsx), so it needs a visible ring. */
+.log__scroll:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }

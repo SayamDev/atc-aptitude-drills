@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Rule-finding drill (clx style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --cell:#F1EFF3; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:1000px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 220px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:20px 18px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .row{display:flex; gap:14px; flex-wrap:wrap}
+  .g{display:grid; grid-template-columns:repeat(3, 30px); grid-template-rows:repeat(3, 30px); gap:3px;
+     padding:6px; background:#fff; border:1px solid var(--rule); border-radius:3px}
+  .g.big{grid-template-columns:repeat(3, 34px); grid-template-rows:repeat(3, 34px)}
+  .g .c{background:var(--cell); border-radius:3px; display:flex; align-items:center; justify-content:center}
+  .g .c svg{width:78%; height:78%; display:block}
+  .opt{padding:0; background:none; border:none; cursor:pointer; border-radius:5px; padding:4px}
+  .opt:focus-visible{outline:3px solid var(--blue); outline-offset:1px}
+  .opt .g{transition:none}
+  .opt[data-sel="1"] .g{box-shadow:0 0 0 3px var(--blue)}
+  .opt.correct .g{box-shadow:0 0 0 3px var(--good)}
+  .opt.missed .g{box-shadow:0 0 0 3px var(--good); opacity:.55}
+  .opt.wrong .g{box-shadow:0 0 0 3px var(--bad)}
+  .opt[disabled]{cursor:default}
+  .lbl{font-size:12px; color:var(--muted); text-align:center; margin:4px 0 0}
+  hr{border:none; border-top:1px solid var(--rule); margin:18px 0}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:16px; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn[disabled]{opacity:.45; cursor:default}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .verdict{min-height:24px; font-size:15px; font-weight:600; margin:14px 0 0}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .ruletext{font-size:15px; margin:6px 0 0}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.check{margin:0; padding-left:19px; font-size:14.5px}
+  ol.check li{margin-bottom:7px} ol.check li:last-child{margin-bottom:0}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 14px}
+  #summary ul{margin:6px 0 14px; padding-left:19px; font-size:14.5px}
+  #summary li{margin-bottom:5px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --cell:#262f38; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .g{background:#1b2229}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Rule-finding drill</h1>
+    <p class="sub">The two grids on the left share a rule. Pick the <strong>two</strong> options that follow the same rule.</p>
+    <div class="clock" id="clock">0.0s</div>
+  </header>
+
+  <main class="panel">
+    <h2>These two follow the rule</h2>
+    <div class="row" id="examples"></div>
+    <hr>
+    <h2>Which two of these follow it?</h2>
+    <div class="row" id="options"></div>
+    <section id="summary" hidden></section>
+    <p class="verdict" id="verdict"></p>
+    <p class="ruletext" id="ruletext"></p>
+    <div class="controls">
+      <button class="btn primary" id="check" disabled>Check</button>
+      <button class="btn" id="skip">Skip &amp; reveal</button>
+      <button class="btn" id="run">Start 6-minute run</button>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>answered</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-avg">—</b><span>average time</span></div>
+        <div class="stat"><b id="s-best">—</b><span>fastest correct</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>Run the checklist in this order</h2>
+      <ol class="check">
+        <li>Count. Total symbols, or how many of one shape.</li>
+        <li>Compare the two examples — anything that differs between them is noise.</li>
+        <li>Rows and columns. Is one line uniform, or all-different?</li>
+        <li>Position. Centre, corners, diagonal.</li>
+        <li>Symmetry. Mirror left-right, top-bottom, or rotated.</li>
+        <li>Empty cells — they count as information too.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+/* ---------- shapes ---------- */
+const SH = [
+  {name:'circle',   color:'#7CC13F', body:'<circle cx="50" cy="50" r="34"/>'},
+  {name:'square',   color:'#E13A2D', body:'<rect x="16" y="16" width="68" height="68" rx="5"/>'},
+  {name:'triangle', color:'#F4C13C', body:'<polygon points="50,16 87,84 13,84"/>'},
+  {name:'cross',    color:'#59B4E4', body:'<polygon points="33,12 67,12 67,33 88,33 88,67 67,67 67,88 33,88 33,67 12,67 12,33 33,33"/>'}
+];
+const svgFor = i => '<svg viewBox="0 0 100 100" aria-hidden="true" fill="'+SH[i].color+'">'+SH[i].body+'</svg>';
+const plural = (n,i) => n+' '+(n===1 ? SH[i].name : (SH[i].name==='cross' ? 'crosses' : SH[i].name+'s'));
+
+/* ---------- grid helpers (9 cells, -1 = empty) ---------- */
+const ROWS = [[0,1,2],[3,4,5],[6,7,8]];
+const COLS = [[0,3,6],[1,4,7],[2,5,8]];
+const CORNERS = [0,2,6,8];
+const filled = g => g.filter(v=>v>=0).length;
+const countOf = (g,s) => g.filter(v=>v===s).length;
+const cells = (g,ix) => ix.map(i=>g[i]);
+const allSame = a => a.every(v=>v===a[0]);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+const shuffled = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){const j=R(i+1);[a[i],a[j]]=[a[j],a[i]];} return a; };
+
+/* ---------- the rule catalogue ---------- */
+function catalogue(){
+  const out = [];
+  for(let k=3;k<=7;k++)
+    out.push({id:'total'+k, text:'Every grid holds exactly '+k+' symbols.', usable:true, test:g=>filled(g)===k});
+  for(let s=0;s<4;s++){
+    for(let k=2;k<=4;k++)
+      out.push({id:'cnt'+s+k, text:'Every grid holds exactly '+plural(k,s)+'.', usable:true, test:g=>countOf(g,s)===k});
+    out.push({id:'none'+s, text:'No grid contains a '+SH[s].name+'.', usable:false, test:g=>countOf(g,s)===0});
+    out.push({id:'ctr'+s, text:'The centre cell is always a '+SH[s].name+'.', usable:true, test:g=>g[4]===s});
+  }
+  for(let a=0;a<4;a++) for(let b=a+1;b<4;b++)
+    out.push({id:'eq'+a+b, text:'Each grid holds as many '+plural(2,a).slice(2)+' as '+plural(2,b).slice(2)+' (at least one of each).',
+              usable:true, test:g=>countOf(g,a)>0 && countOf(g,a)===countOf(g,b)});
+  out.push({id:'ctrEmpty', text:'The centre cell is always empty.', usable:true, test:g=>g[4]===-1});
+  out.push({id:'full', text:'Every cell is filled.', usable:false, test:g=>filled(g)===9});
+  out.push({id:'mirrorV', text:'Each grid is a mirror image left to right.', usable:true,
+            test:g=>ROWS.every(r=>g[r[0]]===g[r[2]])});
+  out.push({id:'mirrorH', text:'Each grid is a mirror image top to bottom.', usable:true,
+            test:g=>COLS.every(c=>g[c[0]]===g[c[2]])});
+  out.push({id:'rot180', text:'Each grid looks the same turned upside down.', usable:true,
+            test:g=>[0,1,2,3].every(i=>g[i]===g[8-i])});
+  out.push({id:'corners', text:'The four corners all hold the same shape.', usable:true,
+            test:g=>g[0]>=0 && allSame(cells(g,CORNERS))});
+  out.push({id:'cornersEmpty', text:'All four corners are empty.', usable:true,
+            test:g=>CORNERS.every(i=>g[i]===-1)});
+  out.push({id:'diag', text:'The three cells on the main diagonal hold the same shape.', usable:true,
+            test:g=>g[0]>=0 && allSame([g[0],g[4],g[8]])});
+  out.push({id:'topBotUniform', text:'The top row is all one shape and the bottom row is all one shape.', usable:true,
+            test:g=>{const t=cells(g,ROWS[0]), b=cells(g,ROWS[2]);
+                     return t[0]>=0 && b[0]>=0 && allSame(t) && allSame(b);}});
+  out.push({id:'midDiff', text:'The middle row is full and holds three different shapes.', usable:true,
+            test:g=>{const m=cells(g,ROWS[1]); return m.every(v=>v>=0) && new Set(m).size===3;}});
+  out.push({id:'rowNoRep', text:'No row contains the same shape twice.', usable:true,
+            test:g=>ROWS.every(r=>{const v=cells(g,r).filter(x=>x>=0); return new Set(v).size===v.length;})});
+  out.push({id:'colNoRep', text:'No column contains the same shape twice.', usable:false,
+            test:g=>COLS.every(c=>{const v=cells(g,c).filter(x=>x>=0); return new Set(v).size===v.length;})});
+  out.push({id:'oneGapRow', text:'Every row has exactly one empty cell.', usable:true,
+            test:g=>ROWS.every(r=>cells(g,r).filter(v=>v===-1).length===1)});
+  out.push({id:'kinds2', text:'Each grid uses exactly two different shapes.', usable:true,
+            test:g=>new Set(g.filter(v=>v>=0)).size===2});
+  out.push({id:'kinds3', text:'Each grid uses exactly three different shapes.', usable:true,
+            test:g=>new Set(g.filter(v=>v>=0)).size===3});
+  out.push({id:'oneRowEmpty', text:'Exactly one row is completely empty.', usable:true,
+            test:g=>ROWS.filter(r=>cells(g,r).every(v=>v===-1)).length===1});
+  out.push({id:'evenTotal', text:'Each grid holds an even number of symbols.', usable:false,
+            test:g=>filled(g)%2===0 && filled(g)>0});
+  return out;
+}
+const CAT = catalogue();
+
+/* ---------- random grid styles ---------- */
+function randGrid(){
+  const style = R(6);
+  const g = Array(9).fill(-1);
+  const rs = () => R(4);
+  if(style === 0){                                   // scattered
+    const n = 2 + R(7);
+    shuffled([...Array(9).keys()]).slice(0,n).forEach(i => g[i] = rs());
+  } else if(style === 1){                            // uniform rows
+    ROWS.forEach(r => { if(R(4)===0) return; const s = rs(); r.forEach(i => g[i] = s); });
+  } else if(style === 2){                            // left-right mirror
+    for(let r=0;r<3;r++){
+      const a = R(5)===0 ? -1 : rs(), b = R(4)===0 ? -1 : rs();
+      g[r*3] = a; g[r*3+2] = a; g[r*3+1] = b;
+    }
+  } else if(style === 3){                            // half-turn symmetric
+    for(let i=0;i<4;i++){ const v = R(4)===0 ? -1 : rs(); g[i] = v; g[8-i] = v; }
+    g[4] = R(4)===0 ? -1 : rs();
+  } else if(style === 4){                            // few shape kinds
+    const kinds = shuffled([0,1,2,3]).slice(0, 2 + R(2));
+    for(let i=0;i<9;i++) g[i] = R(3)===0 ? -1 : pick(kinds);
+  } else {                                           // one shape repeated plus filler
+    const s = rs(), n = 2 + R(3);
+    shuffled([...Array(9).keys()]).slice(0,n).forEach(i => g[i] = s);
+    shuffled([...Array(9).keys()]).slice(0, R(4)).forEach(i => { if(g[i] === -1) g[i] = rs(); });
+  }
+  return g;
+}
+function sample(pred, tries){
+  for(let i=0;i<(tries||4000);i++){ const g = randGrid(); if(pred(g)) return g; }
+  return null;
+}
+const key = g => g.join(',');
+
+/* ---------- question builder ---------- */
+function makeQuestion(){
+  const usable = CAT.filter(r => r.usable);
+  for(let attempt=0; attempt<60; attempt++){
+    const rule = pick(usable);
+    const yes = [], seen = new Set();
+    for(let i=0;i<4;i++){
+      const g = sample(x => rule.test(x) && !seen.has(key(x)));
+      if(!g) break;
+      seen.add(key(g)); yes.push(g);
+    }
+    if(yes.length < 4) continue;
+    const no = [];
+    for(let i=0;i<2;i++){
+      const g = sample(x => !rule.test(x) && !seen.has(key(x)));
+      if(!g) break;
+      seen.add(key(g)); no.push(g);
+    }
+    if(no.length < 2) continue;
+
+    const examples = yes.slice(0,2);
+    const opts = shuffled([yes[2], yes[3], no[0], no[1]]);
+    const answer = opts.map((g,i) => yes.slice(2).some(y => key(y) === key(g)) ? i : -1).filter(i => i >= 0);
+
+    // reject anything a different catalogue rule would answer differently
+    const clash = CAT.some(r => {
+      if(r.id === rule.id) return false;
+      if(!examples.every(r.test)) return false;
+      const sel = opts.map((g,i) => r.test(g) ? i : -1).filter(i => i >= 0);
+      return sel.join() !== answer.join();
+    });
+    if(clash) continue;
+
+    return {examples, opts, answer, text:rule.text};
+  }
+  return null;
+}
+
+/* ---------- interface ---------- */
+const $ = s => document.querySelector(s);
+let Q = null, sel = [], t0 = 0, tick = null, done = false;
+let runEnd = 0, runTimer = null;
+const stats = {done:0, right:0, times:[], skipped:0, log:[]};
+
+const gridHTML = g => '<div class="g big">' + g.map(v =>
+  '<div class="c">' + (v >= 0 ? svgFor(v) : '') + '</div>').join('') + '</div>';
+
+function render(){
+  $('#examples').innerHTML = Q.examples.map(g =>
+    '<div><div class="opt" style="cursor:default">'+gridHTML(g)+'</div></div>').join('');
+  $('#options').innerHTML = Q.opts.map((g,i) =>
+    '<div><button class="opt" data-i="'+i+'" data-sel="0" aria-label="Option '+(i+1)+'">'+
+    gridHTML(g)+'</button><p class="lbl">'+(i+1)+'</p></div>').join('');
+  $('#options').querySelectorAll('.opt').forEach(b => b.onclick = () => toggle(+b.dataset.i));
+}
+function toggle(i){
+  if(done) return;
+  const b = $('#options').querySelector('[data-i="'+i+'"]');
+  if(sel.includes(i)) sel = sel.filter(x => x !== i);
+  else { if(sel.length === 2) return; sel.push(i); }
+  b.dataset.sel = sel.includes(i) ? '1' : '0';
+  $('#check').disabled = sel.length !== 2;
+}
+function newQ(){
+  const q = makeQuestion();
+  if(!q){ $('#verdict').textContent = 'Could not build that one — press Skip for another.'; return; }
+  Q = q; sel = []; done = false;
+  $('#summary').hidden = true;
+  $('#examples').hidden = false; $('#options').hidden = false;
+  $('#check').hidden = false; $('#skip').hidden = false;
+  render();
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#ruletext').textContent = '';
+  $('#check').disabled = true; $('#check').textContent = 'Check';
+  clearInterval(tick); t0 = performance.now();
+  if(!runEnd){ showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function grade(reveal){
+  if(done) return;
+  done = true; clearInterval(tick);
+  const secs = (performance.now()-t0)/1000;
+  const ok = !reveal && sel.slice().sort().join() === Q.answer.join();
+  $('#options').querySelectorAll('.opt').forEach(b => {
+    const i = +b.dataset.i, isAns = Q.answer.includes(i), chosen = sel.includes(i);
+    b.disabled = true;
+    if(isAns && chosen) b.classList.add('correct');
+    else if(isAns) b.classList.add('missed');
+    else if(chosen) b.classList.add('wrong');
+  });
+  if(!reveal){
+    stats.done++; if(ok){ stats.right++; stats.times.push(secs); }
+    stats.log.push({text:Q.text, ok, secs});
+    $('#verdict').textContent = ok ? 'Both right — '+secs.toFixed(1)+'s' : 'Not quite.';
+    $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  } else {
+    stats.skipped++;
+    $('#verdict').textContent = 'Revealed.'; $('#verdict').className = 'verdict';
+  }
+  $('#ruletext').textContent = 'The rule: ' + Q.text;
+  $('#check').disabled = false; $('#check').textContent = 'Next question';
+  updateStats();
+}
+function updateStats(){
+  $('#s-done').textContent = stats.done;
+  $('#s-acc').textContent = stats.done ? Math.round(100*stats.right/stats.done)+'%' : '—';
+  const t = stats.times;
+  $('#s-avg').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  $('#s-best').textContent = t.length ? Math.min(...t).toFixed(1)+'s' : '—';
+}
+
+$('#check').onclick = () => { if(done) newQ(); else grade(false); };
+$('#skip').onclick = () => { if(done) newQ(); else grade(true); };
+$('#run').onclick = () => {
+  if(runEnd){ clearInterval(runTimer); runEnd = 0; done = true; showSummary(); return; }
+  stats.done = 0; stats.right = 0; stats.times = []; stats.skipped = 0; stats.log = []; updateStats();
+  runEnd = performance.now() + 6*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 60000);
+    if(left <= 0){ clearInterval(runTimer); runEnd = 0; done = true; showSummary(); }
+  }, 200);
+  newQ();
+};
+function stopRun(){
+  clearInterval(runTimer); runEnd = 0;
+  $('#run').textContent = 'Start 6-minute run';
+  $('#clock').classList.remove('low');
+  t0 = performance.now(); clearInterval(tick); showClock(); tick = setInterval(showClock, 100);
+}
+function showSummary(){
+  clearInterval(tick);
+  $('#run').textContent = 'Start 6-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  $('#examples').hidden = true; $('#options').hidden = true;
+  $('#check').hidden = true; $('#skip').hidden = true;
+  $('#verdict').textContent = ''; $('#ruletext').textContent = '';
+
+  const wrong = stats.done - stats.right;
+  const acc = stats.done ? Math.round(100*stats.right/stats.done) : 0;
+  const all = stats.log.map(e => e.secs);
+  const avgAll = all.length ? (all.reduce((a,b)=>a+b,0)/all.length) : 0;
+  const rightT = stats.times;
+
+  let pace;
+  if(!stats.done) pace = 'No questions answered — start the next run by committing to an answer even when you are unsure.';
+  else if(avgAll > 40) pace = 'You averaged '+avgAll.toFixed(0)+'s per question. That is slow for a six-minute test — aim to abandon anything you have not cracked by about 40 seconds.';
+  else if(acc < 60) pace = 'Your pace is fine at '+avgAll.toFixed(0)+'s per question, but accuracy is the bottleneck. Spend a few more seconds stating the rule in a sentence before you click.';
+  else pace = 'Averaging '+avgAll.toFixed(0)+'s per question at '+acc+'% accuracy. Hold that and push gently for speed.';
+
+  const missed = [...new Set(stats.log.filter(e => !e.ok).map(e => e.text))];
+  const slowest = stats.log.filter(e => e.ok).sort((a,b)=>b.secs-a.secs)[0];
+
+  $('#summary').innerHTML =
+    '<h3>Six-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.right+'</b><span>right</span></div>' +
+      '<div><b class="no">'+wrong+'</b><span>wrong</span></div>' +
+      '<div><b>'+stats.skipped+'</b><span>skipped</span></div>' +
+      '<div><b>'+(stats.done ? acc+'%' : '—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+(avgAll ? avgAll.toFixed(1)+'s' : '—')+'</b><span>average</span></div>' +
+      '<div><b>'+(rightT.length ? Math.min(...rightT).toFixed(1)+'s' : '—')+'</b><span>fastest right</span></div>' +
+    '</div>' +
+    '<p class="pace">'+pace+'</p>' +
+    (missed.length ? '<h2>Rules you missed</h2><ul>'+missed.map(t=>'<li>'+t+'</li>').join('')+'</ul>' : '') +
+    (slowest ? '<p class="pace">Slowest one you did get: '+slowest.text.charAt(0).toLowerCase()+slowest.text.slice(1,-1)+' — '+slowest.secs.toFixed(0)+'s.</p>' : '') +
+    '<button class="btn primary" id="again">Start another run</button> ' +
+    '<button class="btn" id="untimed">Back to untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#untimed').onclick = () => { stopRun(); newQ(); };
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key >= '1' && e.key <= '4') toggle(+e.key - 1);
+  if(e.key === 'Enter'){ if(done) newQ(); else if(sel.length === 2) grade(false); }
+});
+newQ();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

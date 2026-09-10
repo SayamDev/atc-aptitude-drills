@@ -1,0 +1,57 @@
+.drill {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+  align-items: start;
+}
+/* Single column below the tablet break; the aside becomes reference material underneath. */
+@media (max-width: 860px) {
+  .drill { grid-template-columns: minmax(0, 1fr); }
+}
+
+.drill__head {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 3px solid var(--accent);
+}
+.drill__head h1 { margin: 0; }
+.drill__summary { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--step--1); }
+.drill__clock { margin: 0; font: 600 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums; }
+.drill__clock--low { color: var(--bad); }
+
+.drill__stage {
+  padding: var(--space-5) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+.drill__stage:focus { outline: none; }
+
+.drill__controls {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--step--1);
+}
+
+.drill__aside { display: flex; flex-direction: column; gap: var(--space-4); }
+.drill__aside .panel { padding: var(--space-4); }
+.drill__aside h2 {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-muted); margin-bottom: var(--space-2);
+}
+.drill__aside ol, .drill__aside ul { margin: 0; padding-left: 1.2em; font-size: var(--step--1); }
+.drill__aside li { margin-bottom: var(--space-2); }
+
+/* While the instructions are open they are the whole page: the aside is hidden,
+   because it is in-play reference material and would only repeat the method. */
+.drill--brief { grid-template-columns: minmax(0, 1fr); }
+.drill--brief .drill__stage { align-items: stretch; }

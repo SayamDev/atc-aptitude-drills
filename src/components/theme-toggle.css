@@ -1,0 +1,16 @@
+.theme {
+  display: inline-flex; margin: 0; padding: 2px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); gap: 2px;
+}
+.theme__opt {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Below the 44px target minimum would fail WCAG 2.5.8, so the row sets the height. */
+  min-height: calc(var(--tap) - 8px); padding: 0 var(--space-3);
+  font-size: var(--step--1); color: var(--ink-muted);
+  border-radius: 2px; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.theme__opt:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, var(--surface)); }
+.theme__opt.is-on { background: var(--accent); color: var(--accent-ink); }
+/* The input is visually hidden, so the ring has to be drawn on the label. */
+.theme__opt:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }

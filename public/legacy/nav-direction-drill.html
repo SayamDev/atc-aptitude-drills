@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>Sense of direction drill (scales nav style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 240px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:22px 18px 18px; display:flex; flex-direction:column; align-items:center; gap:16px}
+  .ask{margin:0; font-size:15px; color:var(--muted)}
+  .arrows{display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center}
+  .box{width:120px; height:120px; border:1px solid var(--rule); border-radius:5px; background:#fff;
+       display:flex; align-items:center; justify-content:center}
+  .box svg{width:76%; height:76%}
+  .cap{font-size:12.5px; color:var(--muted); text-align:center; margin:6px 0 0}
+  .arrow-to{font-size:26px; color:var(--muted)}
+  .steps{font:600 17px/1.7 ui-sans-serif,system-ui; text-align:center; margin:0}
+  .steps span{display:inline-block; padding:3px 10px; margin:3px; border:1px solid var(--rule);
+              border-radius:3px; background:#F7F8F7}
+  .opts{display:grid; gap:8px; grid-template-columns:repeat(2, minmax(150px, 1fr)); max-width:420px; width:100%}
+  .opts.eight{grid-template-columns:repeat(2, minmax(140px, 1fr))}
+  .opts button{font:inherit; padding:13px 12px; border:1px solid var(--rule); border-radius:3px;
+               background:#F9FAF9; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px}
+  .opts button:hover{background:#EFF2EF}
+  .opts button svg{width:26px; height:26px}
+  .opts button.good{border-color:var(--good); background:#EDF6EF; box-shadow:inset 0 0 0 1px var(--good)}
+  .opts button.bad{border-color:var(--bad); background:#FBEDEC; box-shadow:inset 0 0 0 1px var(--bad)}
+  .opts button[disabled]{cursor:default}
+  .verdict{min-height:26px; font-size:15px; font-weight:600; margin:0; text-align:center}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{width:100%}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(94px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .box{background:#1b2229}
+  :where(:root[data-theme="dark"]) .steps span{background:#232b33}
+  :where(:root[data-theme="dark"]) .opts button{background:#232b33}
+  :where(:root[data-theme="dark"]) .opts button:hover{background:#232b33}
+  :where(:root[data-theme="dark"]) .opts button.good{background:#1e2c23}
+  :where(:root[data-theme="dark"]) .opts button.bad{background:#33211f}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>Sense of direction drill</h1>
+    <p class="sub">Bird's-eye view. The manoeuvre is from the <strong>driver's</strong> seat, not yours.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <p class="ask" id="ask"></p>
+    <div class="arrows" id="arrows"></div>
+    <div class="opts" id="opts"></div>
+    <p class="verdict" id="verdict"></p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn primary" id="run">Start 1-minute run</button>
+      <label>Task
+        <select id="mode">
+          <option value="which" selected>Which manoeuvre?</option>
+          <option value="where">Where do you end up?</option>
+          <option value="mixed">Mixed</option>
+        </select>
+      </label>
+      <label>Focus
+        <select id="focus">
+          <option value="all" selected>All headings</option>
+          <option value="down">Heading down only</option>
+          <option value="mistakes">My mistakes</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="exam"> Exam conditions</label>
+      <label>Directions
+        <select id="dirs">
+          <option value="4" selected>Four</option>
+          <option value="8">Eight</option>
+        </select>
+      </label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>answered</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-rt">—</b><span>seconds each</span></div>
+        <div class="stat"><b id="s-down">—</b><span>when heading down</span></div>
+        <div class="stat"><b id="s-missed">0</b><span>on your mistake list</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>The one rule</h2>
+      <ol class="tips">
+        <li>Watch the <b>swing</b>, not where the arrow ends up pointing.</li>
+        <li><b>Clockwise = right</b>, anticlockwise = left. True from any starting direction.</li>
+        <li>Heading down the screen the car faces you, so its left is your right. The swing rule dodges that entirely.</li>
+        <li>Same arrow twice = straight on. Exact opposites = turn back. Those two need no thinking.</li>
+      </ol>
+    </section>
+
+    <section class="panel pad">
+      <h2>Bear, turn, sharp</h2>
+      <p style="font-size:14.5px; margin:0 0 10px">With eight directions the compass has eight points, so
+      count how many <b>notches</b> the arrow moved. Each notch is 45&deg;.</p>
+      <ol class="tips">
+        <li><b>1 notch — bear.</b> A gentle veer, like taking the left fork of a road.</li>
+        <li><b>2 notches — turn.</b> The proper 90&deg; turn at a junction.</li>
+        <li><b>3 notches — sharp.</b> Doubling back on yourself at an angle.</li>
+        <li><b>4 notches — turn back.</b> A U-turn; the arrows point exactly opposite.</li>
+      </ol>
+      <p style="font-size:14.5px; margin:10px 0 0">Count the notches first, then decide the side:
+      clockwise makes it a right, anticlockwise a left. So one notch clockwise is <b>bear right</b>,
+      three anticlockwise is <b>sharp left</b>.</p>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const pick = a => a[R(a.length)];
+const norm = d => ((d % 360) + 360) % 360;
+
+const NAME = {0:'north (up)',45:'north-east',90:'east (right)',135:'south-east',
+              180:'south (down)',225:'south-west',270:'west (left)',315:'north-west'};
+const TURNS4 = [
+  {d:0,   label:'Keep straight on'},
+  {d:90,  label:'Turn right'},
+  {d:180, label:'Turn back'},
+  {d:270, label:'Turn left'}
+];
+const TURNS8 = [
+  {d:0,   label:'Keep straight on'},
+  {d:45,  label:'Bear right'},
+  {d:90,  label:'Turn right'},
+  {d:135, label:'Sharp right'},
+  {d:180, label:'Turn back'},
+  {d:225, label:'Sharp left'},
+  {d:270, label:'Turn left'},
+  {d:315, label:'Bear left'}
+];
+const turnSet = () => $('#dirs').value === '8' ? TURNS8 : TURNS4;
+const dirSet  = () => $('#dirs').value === '8'
+  ? [0,45,90,135,180,225,270,315] : [0,90,180,270];
+
+const arrowSVG = (deg, colour) =>
+  '<svg viewBox="0 0 100 100" aria-hidden="true"><g transform="rotate('+deg+' 50 50)">' +
+  '<line x1="50" y1="76" x2="50" y2="30" stroke="'+(colour||'#18222C')+'" stroke-width="10" stroke-linecap="round"/>' +
+  '<polygon points="50,12 30,42 70,42" fill="'+(colour||'#18222C')+'"/></g></svg>';
+
+let Q = null, t0 = 0, tick = null, answered = false, trials = [];
+const exam = () => $('#exam').checked;
+const missed = [];
+const sig = q => q.mode + ':' + q.from + ':' + (q.mode === 'which' ? q.to : q.seq.map(t=>t.d).join('.'));
+let runEnd = 0, runTimer = null;
+
+function makeQ(){
+  if($('#focus').value === 'mistakes'){
+    if(!missed.length) return null;
+    const m = missed[R(missed.length)];
+    return Object.assign({}, m, {retry:true});
+  }
+  const mode = $('#mode').value === 'mixed' ? pick(['which','where']) : $('#mode').value;
+  const turns = turnSet();
+  const dirs = $('#focus').value === 'down'
+    ? dirSet().filter(d => d > 90 && d < 270)      // facing you, where the mirror bites
+    : dirSet();
+  if(mode === 'which'){
+    const from = pick(dirs);
+    const t = pick(turns.filter(x => x.d !== 0 || Math.random() < 0.4));
+    return {mode, from, to:norm(from + t.d), answer:t.d, from0:from};
+  }
+  const from = pick(dirs);
+  const n = 2 + R(2);
+  const seq = [];
+  let cur = from;
+  for(let i=0;i<n;i++){ const t = pick(turns.filter(x => x.d !== 180)); seq.push(t); cur = norm(cur + t.d); }
+  return {mode, from, seq, answer:cur, from0:from};
+}
+
+function render(){
+  const dirs = dirSet(), turns = turnSet();
+  if(Q.mode === 'which'){
+    $('#ask').textContent = 'Which manoeuvre did the driver make?';
+    $('#arrows').innerHTML =
+      '<div><div class="box">'+arrowSVG(Q.from)+'</div><p class="cap">before</p></div>' +
+      '<div class="arrow-to">&rarr;</div>' +
+      '<div><div class="box">'+arrowSVG(Q.to, '#1F6FB2')+'</div><p class="cap">after</p></div>';
+    $('#opts').className = 'opts' + (turns.length === 8 ? ' eight' : '');
+    $('#opts').innerHTML = turns.map(t =>
+      '<button data-a="'+t.d+'">'+t.label+'</button>').join('');
+  } else {
+    $('#ask').textContent = 'Which way is the car pointing at the end?';
+    $('#arrows').innerHTML =
+      '<div><div class="box">'+arrowSVG(Q.from)+'</div><p class="cap">start</p></div>' +
+      '<div><p class="steps">'+Q.seq.map(t => '<span>'+t.label+'</span>').join('') + '</p></div>';
+    const wrong = dirs.filter(d => d !== Q.answer);
+    const opts = [Q.answer, ...wrong.sort(() => Math.random()-0.5).slice(0,3)]
+      .sort(() => Math.random()-0.5);
+    $('#opts').className = 'opts';
+    $('#opts').innerHTML = opts.map(d =>
+      '<button data-a="'+d+'">'+arrowSVG(d)+'</button>').join('');
+  }
+  $('#opts').querySelectorAll('button').forEach(b => b.onclick = () => answer(+b.dataset.a));
+}
+
+function newQ(){
+  const q = makeQ();
+  if(!q){
+    $('#ask').textContent = '';
+    $('#arrows').innerHTML = ''; $('#opts').innerHTML = '';
+    $('#verdict').innerHTML = '<b>No mistakes saved yet.</b> Practise the other modes first — anything you get wrong is collected here.';
+    $('#verdict').className = 'verdict';
+    clearInterval(tick);
+    return;
+  }
+  Q = q; answered = false;
+  render();
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+  $('#summary').hidden = true;
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function answer(a){
+  if(answered) return;
+  answered = true; clearInterval(tick);
+  const secs = (performance.now()-t0)/1000, ok = a === Q.answer;
+  trials.push({ok, secs, from:Q.from0});
+  if(!ok){
+    if(!missed.some(m => sig(m) === sig(Q))){
+      const copy = Object.assign({}, Q); delete copy.retry;
+      missed.push(copy);
+    }
+  } else if(Q.retry){
+    const at = missed.findIndex(m => sig(m) === sig(Q));
+    if(at >= 0) missed.splice(at, 1);
+  }
+  if(exam()){
+    updateStats();
+    setTimeout(() => { if($('#summary').hidden) newQ(); }, 110);
+    return;
+  }
+  $('#opts').querySelectorAll('button').forEach(b => {
+    b.disabled = true;
+    if(+b.dataset.a === Q.answer) b.classList.add('good');
+    else if(+b.dataset.a === a) b.classList.add('bad');
+  });
+  if(Q.mode === 'which'){
+    const t = turnSet().find(x => x.d === Q.answer);
+    $('#verdict').textContent = ok
+      ? 'Correct — ' + secs.toFixed(1) + 's'
+      : 'It was ' + t.label.toLowerCase() + ': ' + NAME[Q.from] + ' to ' + NAME[Q.to] + '.';
+  } else {
+    $('#verdict').textContent = ok
+      ? 'Correct — ' + secs.toFixed(1) + 's'
+      : 'Starting ' + NAME[Q.from] + ', those turns end up facing ' + NAME[Q.answer] + '.';
+  }
+  if(Q.retry) $('#verdict').textContent += ok
+    ? '  Retired — ' + missed.length + ' left.'
+    : '  Staying on the list.';
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  updateStats();
+  setTimeout(() => { if($('#summary').hidden) newQ(); }, ok ? 550 : 2000);
+}
+
+function updateStats(){
+  const n = trials.length, right = trials.filter(t => t.ok);
+  $('#s-done').textContent = n;
+  $('#s-acc').textContent = n ? Math.round(100*right.length/n)+'%' : '—';
+  $('#s-rt').textContent = n ? (trials.reduce((a,t)=>a+t.secs,0)/n).toFixed(1)+'s' : '—';
+  const down = trials.filter(t => t.from > 90 && t.from < 270);
+  $('#s-down').textContent = down.length
+    ? Math.round(100*down.filter(t=>t.ok).length/down.length)+'%' : '—';
+  $('#s-missed').textContent = missed.length;
+}
+
+$('#mode').onchange = newQ;
+$('#focus').onchange = newQ;
+$('#exam').onchange = () => {
+  const on = exam();
+  if(on){ $('#mode').value = 'which'; $('#focus').value = 'all'; }
+  $('#mode').disabled = on; $('#focus').disabled = on;
+  document.querySelectorAll('aside .pad').forEach((el, i) => { if(i > 0) el.hidden = on; });
+  $('#verdict').textContent = '';
+  if(on && !runEnd) $('#run').click();
+  else if(!on && runEnd) $('#run').click();
+  else newQ();
+};
+$('#dirs').onchange = newQ;
+document.addEventListener('keydown', e => {
+  if(e.key >= '1' && e.key <= '8'){
+    const b = $('#opts').querySelectorAll('button')[+e.key - 1];
+    if(b && !b.disabled) b.click();
+  }
+});
+
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  trials = []; updateStats();
+  runEnd = performance.now() + 60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    $('#clock').textContent = '0:' + String(Math.floor(left/1000)).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 15000);
+    if(left <= 0) endRun();
+  }, 200);
+  newQ();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; answered = true;
+  $('#run').textContent = 'Start 1-minute run';
+  $('#clock').textContent = 'ready'; $('#clock').classList.remove('low');
+  const n = trials.length, right = trials.filter(t => t.ok).length;
+  const acc = n ? Math.round(100*right/n) : 0;
+  const avg = n ? trials.reduce((a,t)=>a+t.secs,0)/n : 0;
+  const up = trials.filter(t => t.from === 0);
+  const down = trials.filter(t => t.from > 90 && t.from < 270);
+  const pct = arr => arr.length ? Math.round(100*arr.filter(t=>t.ok).length/arr.length)+'%' : '—';
+
+  let note;
+  if(!n) note = 'Nothing answered.';
+  else if(down.length >= 3 && up.length >= 2 &&
+          (down.filter(t=>t.ok).length/down.length) < (up.filter(t=>t.ok).length/up.length) - 0.2)
+    note = 'You are much weaker when the car heads down the screen — that is the mirror case. Turn your head, or say "the car is facing me, so its left is my right" before you answer.';
+  else if(acc < 80) note = 'Accuracy '+acc+'%. Slow down by half a second and physically point along the arrow before choosing.';
+  else if(avg > 4) note = 'Accurate but slow at '+avg.toFixed(1)+'s. The real test gives one minute total, so aim for two to three seconds.';
+  else note = acc+'% at '+avg.toFixed(1)+'s each — about '+Math.round(60/avg)+' in a one-minute test. Good.';
+
+  $('#summary').innerHTML =
+    '<h3>One-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b>'+n+'</b><span>answered</span></div>' +
+      '<div><b class="ok">'+right+'</b><span>correct</span></div>' +
+      '<div><b class="no">'+(n-right)+'</b><span>wrong</span></div>' +
+      '<div><b>'+(n?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+pct(up)+'</b><span>heading up</span></div>' +
+      '<div><b>'+pct(down)+'</b><span>heading down</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => newQ();
+}
+
+newQ();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

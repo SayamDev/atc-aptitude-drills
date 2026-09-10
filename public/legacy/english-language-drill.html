@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en-GB">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Runs before first paint so a chosen theme never flashes. Mirrors index.html. */
+(function(){try{var t=localStorage.getItem('atc-drills:theme');
+if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);
+document.documentElement.style.colorScheme=t;}}catch(e){}})();
+
+/*
+ * Hold the drill clock until the candidate actually starts.
+ *
+ * Every drill times an item with performance.now() and anchors it when the item
+ * is built, which happens at load - so the clock was already running while the
+ * instructions were still on screen, and a slow reader scored a slow solve.
+ * Each page implements its timer differently, so rather than nine separate
+ * edits this freezes the clock itself: performance.now() returns the load
+ * instant until the drill is armed, then resumes as if no time had passed.
+ * Animations drive off requestAnimationFrame's own timestamp and are unaffected.
+ */
+(function(){
+  var real = performance.now.bind(performance);
+  var origin = real(), held = true, offset = 0;
+  performance.now = function(){ return held ? origin : real() - offset; };
+  window.__armDrillClock = function(){
+    if(!held) return false;
+    held = false;
+    offset = real() - origin;
+    return true;
+  };
+  window.__drillClockHeld = function(){ return held; };
+})();
+</script>
+
+<title>English language drill (scales lt-e style)</title>
+<style>
+  :root{
+    --bezel:#DDE1DC; --face:#FFFFFF; --rule:#C6CCC5; --ink:#18222C; --muted:#6C7681;
+    --blue:#1F6FB2; --good:#2E7D46; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; padding:20px; background:var(--bezel); color:var(--ink);
+       font:16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif}
+  .wrap{max-width:980px; margin:0 auto; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+  @media (max-width:880px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+  .panel{background:var(--face); border:1px solid var(--rule); border-radius:4px}
+  header.panel{grid-column:1/-1; padding:14px 18px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; border-bottom:3px solid var(--blue)}
+  h1{margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em}
+  .sub{margin:0; color:var(--muted); font-size:14px; flex:1 1 220px}
+  .clock{font:600 22px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .clock.low{color:var(--bad)}
+  main{padding:22px 20px 18px}
+  .tag{display:inline-block; font:600 11px/1 ui-monospace,Menlo,monospace; letter-spacing:.08em;
+       text-transform:uppercase; color:var(--muted); border:1px solid var(--rule); border-radius:2px; padding:5px 7px}
+  .stem{font-size:19px; line-height:1.55; margin:14px 0 18px}
+  .stem b{font-weight:650}
+  .gap{display:inline-block; min-width:78px; border-bottom:2px solid var(--ink); vertical-align:baseline}
+  .opts{display:grid; gap:8px; max-width:560px}
+  .opts button{font:inherit; text-align:left; padding:12px 14px; border:1px solid var(--rule);
+               border-radius:3px; background:#F9FAF9; cursor:pointer}
+  .opts button:hover{background:#EFF2EF}
+  .opts button:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  .opts button.good{border-color:var(--good); background:#EDF6EF; box-shadow:inset 0 0 0 1px var(--good)}
+  .opts button.bad{border-color:var(--bad); background:#FBEDEC; box-shadow:inset 0 0 0 1px var(--bad)}
+  .opts button[disabled]{cursor:default}
+  .opts kbd{float:right; font:500 12px/1.5 ui-monospace,Menlo,monospace; color:var(--muted)}
+  .verdict{min-height:26px; font-size:15px; margin:16px 0 0}
+  .verdict b{font-weight:650}
+  .verdict.right{color:var(--good)} .verdict.wrong{color:var(--bad)}
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:18px; font-size:14px}
+  .btn{font:inherit; padding:8px 14px; border-radius:3px; border:1px solid var(--rule); background:#F7F8F7; cursor:pointer}
+  .btn:hover{background:#EDF0ED}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn.primary:hover{background:#195F99}
+  .btn:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+  select{font:inherit; font-size:14px; padding:7px 8px; border:1px solid var(--rule); border-radius:3px; background:#fff}
+  aside{display:flex; flex-direction:column; gap:16px}
+  .pad{padding:16px 18px}
+  h2{margin:0 0 10px; font-size:13px; font-weight:650; color:var(--muted)}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px 8px}
+  .stat b{display:block; font:600 20px/1.2 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .stat span{font-size:12.5px; color:var(--muted)}
+  ol.tips{margin:0; padding-left:19px; font-size:14.5px}
+  ol.tips li{margin-bottom:7px} ol.tips li:last-child{margin-bottom:0}
+  #summary{margin-top:18px}
+  #summary h3{margin:0 0 12px; font-size:17px; font-weight:650}
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(94px,1fr)); gap:14px 10px; margin-bottom:14px}
+  .scores div b{display:block; font:600 26px/1.15 ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .scores div b.ok{color:var(--good)} .scores div b.no{color:var(--bad)}
+  .scores div span{font-size:12.5px; color:var(--muted)}
+  .pace{font-size:14.5px; margin:0 0 12px}
+  .missed{font-size:14.5px; margin:0 0 12px; padding-left:19px}
+  .missed li{margin-bottom:10px; line-height:1.5}
+  .missed b{font-weight:650}
+  #summary h2{margin:16px 0 8px}
+
+
+  /* ---- GENERATED DARK THEME - see docs/accessibility.md ----
+     Scoped with :where() so every rule keeps the specificity of the
+     light rule it shadows; the cascade between them is unchanged. */
+  :root[data-theme="dark"]{--bezel:#12171c; --face:#1b2229; --rule:#38424c; --ink:#e8edf2; --muted:#a3b0bb; --blue:#6fb3e8; --good:#6cc48a; --bad:#f08a80}
+  :where(:root[data-theme="dark"]) .opts button{background:#232b33}
+  :where(:root[data-theme="dark"]) .opts button:hover{background:#232b33}
+  :where(:root[data-theme="dark"]) .opts button.good{background:#1e2c23}
+  :where(:root[data-theme="dark"]) .opts button.bad{background:#33211f}
+  :where(:root[data-theme="dark"]) .btn{background:#232b33}
+  :where(:root[data-theme="dark"]) .btn:hover{background:#2b343d}
+  :where(:root[data-theme="dark"]) .btn.primary{color:#1b2229}
+  :where(:root[data-theme="dark"]) .btn.primary:hover{background:#8cc4ef}
+  :where(:root[data-theme="dark"]) select{background:#1b2229}
+</style>
+
+<div class="wrap">
+  <header class="panel">
+    <h1>English language drill</h1>
+    <p class="sub">Fluency, vocabulary and spelling — the three parts of scales lt-e.</p>
+    <div class="clock" id="clock">ready</div>
+  </header>
+
+  <main class="panel">
+    <span class="tag" id="tag">fluency</span>
+    <p class="stem" id="stem"></p>
+    <div class="opts" id="opts"></div>
+    <p class="verdict" id="verdict"></p>
+    <section id="summary" hidden></section>
+    <div class="controls">
+      <button class="btn primary" id="run">Start 10-minute run</button>
+      <button class="btn" id="skip">Skip</button>
+      <button class="btn" id="review">Review my mistakes</button>
+      <label>Practise
+        <select id="section">
+          <option value="all" selected>All three</option>
+          <option value="fluency">Fluency only</option>
+          <option value="vocab">Vocabulary only</option>
+          <option value="spelling">Spelling only</option>
+          <option value="mistakes">My mistakes</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="exam"> Exam conditions</label>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel pad">
+      <h2>Your run</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-done">0</b><span>answered</span></div>
+        <div class="stat"><b id="s-acc">—</b><span>accuracy</span></div>
+        <div class="stat"><b id="s-rate">—</b><span>seconds each</span></div>
+        <div class="stat"><b id="s-weak">—</b><span>weakest part</span></div>
+      </div>
+    </section>
+    <section class="panel pad">
+      <h2>How to play it</h2>
+      <ol class="tips">
+        <li>Read the whole sentence before looking at the options — the ending usually decides the answer.</li>
+        <li>For spelling, sound out the syllables one at a time; doubled letters are where the traps live.</li>
+        <li>For vocabulary, decide if the word is positive or negative first. That alone kills two options.</li>
+        <li>Eliminate before you guess. Wrong answers may cost you marks.</li>
+        <li>Never spend more than about fifteen seconds on one item.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const R = n => Math.floor(Math.random()*n);
+const shuffled = a => { a = a.slice(); for(let i=a.length-1;i>0;i--){ const j=R(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+/* ---------- item banks ---------- */
+// fluency: sentence with a gap, four candidate fillers, first one correct
+const FLUENCY = [
+  ["He was accused ___ negligence after the incident review.", ["of","for","with","in"], "'Accuse' takes 'of' — accused of negligence."],
+  ["The findings were based ___ three years of traffic data.", ["on","in","of","from"], "Findings, reports and claims are based 'on' evidence."],
+  ["She is more than capable ___ handling a busy sector.", ["of","to","for","with"], "'Capable' takes 'of' + -ing. Compare 'able to handle'."],
+  ["Several staff objected ___ the revised shift pattern.", ["to","against","with","for"], "You object 'to' something."],
+  ["All operators must comply ___ the new safety regulations.", ["with","to","for","in"], "You comply 'with' rules; you conform 'to' them."],
+  ["He apologised ___ the delay in issuing the clearance.", ["for","about","of","on"], "You apologise 'for' a thing, but 'to' a person."],
+  ["These results differ ___ the ones we were expecting.", ["from","than","to","with"], "'Differ from' and 'different from' — never 'differ than'."],
+  ["She insisted ___ checking every figure herself.", ["on","to","for","about"], "'Insist on' + -ing."],
+  ["The watch consists ___ six controllers and a supervisor.", ["of","in","from","with"], "A group consists 'of' its members. Never 'consists in' for this sense."],
+  ["He is responsible ___ scheduling the training rota.", ["for","of","to","with"], "You are responsible 'for' a task, but responsible 'to' a person."],
+  ["They were entirely unaware ___ the frequency change.", ["of","about","for","to"], "'Aware of' and 'unaware of'."],
+  ["The delay resulted ___ a fault in the radar feed.", ["from","in","of","by"], "'Result from' points back to the cause."],
+  ["The fault resulted ___ a two-hour ground stop.", ["in","from","to","of"], "'Result in' points forward to the outcome. The opposite of the previous one."],
+  ["She succeeded ___ calming the situation very quickly.", ["in","to","at","on"], "'Succeed in' + -ing."],
+  ["We rely ___ accurate readings from the ground sensors.", ["on","in","of","to"], "'Rely on', same as 'depend on'."],
+  ["He was praised ___ his quick thinking under pressure.", ["for","of","on","about"], "'Praised for', 'criticised for', 'commended for'."],
+  ["The decision was consistent ___ existing policy.", ["with","to","for","in"], "'Consistent with' — matching or in line with."],
+  ["She has a real talent ___ languages.", ["for","in","of","with"], "'A talent for', 'a knack for', 'an eye for'."],
+  ["The tribunal deprived him ___ his licence for a year.", ["of","from","with","to"], "'Deprive someone of something'."],
+  ["The new tower is adjacent ___ the main terminal.", ["to","with","from","of"], "'Adjacent to' means next to."],
+  ["Neither of the two reports ___ complete.", ["was","were","are","have"], "'Neither of' is singular, so it takes 'was'."],
+  ["If I ___ known about the closure, I would have told you.", ["had","have","would have","was"], "Third conditional: if + had + past participle, then would have."],
+  ["The equipment ___ serviced last Tuesday.", ["was","has been","is","were"], "A finished past time ('last Tuesday') needs the simple past."],
+  ["Each of the trainees ___ a headset and a manual.", ["has","have","having","are having"], "'Each of' is always singular, so 'has'."],
+  ["He would have passed if he ___ revised properly.", ["had","would have","has","did"], "Third conditional again: if he had revised."],
+  ["There were ___ delays this month than last.", ["fewer","less","lesser","fewest"], "'Fewer' for things you can count, 'less' for quantities you cannot."],
+  ["The weather did not ___ the departure schedule.", ["affect","effect","affected","effected"], "'Affect' is the verb, 'effect' is the noun."],
+  ["You should ___ the emergency procedure every week.", ["practise","practice","practising","practicing"], "In British English 'practise' is the verb and 'practice' the noun."],
+  ["He must renew his ___ every three years.", ["licence","license","licencing","licensing"], "In British English 'licence' is the noun and 'license' the verb."],
+  ["The system lost ___ connection to the main server.", ["its","it's","its'","their"], "'Its' is possessive. 'It's' only ever means 'it is'."],
+  ["The officer ___ we contacted was extremely helpful.", ["whom","who","which","whose"], "'Whom' is the object — we contacted him, so whom."],
+  ["A large ___ of aircraft were held on the ground.", ["number","amount","quantity","deal"], "'Number' for countable things, 'amount' for uncountable ones."],
+  ["The ___ reason for the delay was crew fatigue.", ["principal","principle","principled","principals"], "'Principal' means main; a 'principle' is a rule or belief."],
+  ["The two systems ___ each other rather than compete.", ["complement","compliment","complementing","complimented"], "'Complement' completes something; a 'compliment' is praise."],
+  ["The aircraft remained ___ on the taxiway for ten minutes.", ["stationary","stationery","stationaries","stationing"], "'Stationary' means not moving; 'stationery' is paper and pens."],
+  ["I was warned ___ that the questioning would be tough.", ["beforehand","before hand","aforehand","forehand"], "'Beforehand' is one word."],
+  ["Her explanation was quite different ___ the one he gave.", ["from","than","of","as"], "'Different from' is the standard British form."],
+  ["We are looking forward ___ hearing from you.", ["to","for","on","at"], "'Look forward to' is followed by -ing, never the infinitive."],
+  ["The controller was commended ___ her handling of the emergency.", ["for","of","about","in"], "'Commended for', like praised for."],
+  ["He has a tendency ___ speak too quickly on the radio.", ["to","of","for","in"], "'A tendency to' + verb."]
+];
+
+// vocabulary: definition, then the matching word first and three distractors
+const VOCAB = [
+  ["confidently optimistic and cheerful", ["sanguine","morose","tepid","brusque"], "She stayed sanguine about the delay even as the queue grew."],
+  ["using very few words", ["laconic","verbose","candid","jovial"], "His laconic reply was simply: noted."],
+  ["lasting for a very short time", ["ephemeral","perpetual","tangible","arduous"], "The applause was ephemeral; a minute later the hall was empty."],
+  ["showing great attention to detail", ["meticulous","haphazard","cursory","ambivalent"], "She kept meticulous notes on every handover."],
+  ["present or found everywhere", ["ubiquitous","scarce","transient","obscure"], "Mobile phones are now ubiquitous in the workplace."],
+  ["dealing with things sensibly and realistically", ["pragmatic","idealistic","whimsical","dogmatic"], "A pragmatic supervisor fixes the rota rather than debating it."],
+  ["holding firmly and refusing to give up", ["tenacious","fickle","docile","lenient"], "He was tenacious enough to retake the exam three times."],
+  ["truthful and straightforward", ["candid","evasive","ornate","wary"], "Give me a candid opinion, not a polite one."],
+  ["showing care and thought for the future", ["prudent","reckless","indignant","aloof"], "It was prudent to refuel before the weather closed in."],
+  ["requiring great effort", ["arduous","effortless","trivial","fleeting"], "Training for the role is arduous but rewarding."],
+  ["able to judge a situation shrewdly", ["astute","gullible","placid","verbose"], "An astute manager spotted the error in the schedule."],
+  ["giving information clearly in few words", ["concise","rambling","obscure","elaborate"], "Keep the handover concise; the next shift is waiting."],
+  ["showing steady and careful effort", ["diligent","idle","erratic","hesitant"], "Diligent revision beats last-minute cramming."],
+  ["treating all sides equally", ["impartial","biased","hostile","partisan"], "An impartial panel reviewed both complaints."],
+  ["clear and easy to understand", ["lucid","murky","cryptic","convoluted"], "Her briefing was lucid and everyone understood it."],
+  ["dull and ordinary", ["mundane","exotic","urgent","profound"], "Most of the job is mundane checks, not emergencies."],
+  ["a person new to an activity", ["novice","veteran","mentor","sceptic"], "As a novice, he shadowed an experienced controller."],
+  ["no longer in use", ["obsolete","current","durable","provisional"], "The old radar became obsolete after the upgrade."],
+  ["seeming reasonable or probable", ["plausible","absurd","definite","obscure"], "That is a plausible explanation, but we need proof."],
+  ["reluctant to speak freely", ["reticent","garrulous","brazen","cordial"], "He was reticent about why he had left his last job."],
+  ["to examine closely and critically", ["scrutinise","glance","disregard","summarise"], "Auditors will scrutinise every logbook entry."],
+  ["more than is needed", ["superfluous","essential","scarce","modest"], "Cut the superfluous detail from the report."],
+  ["to clear of blame or suspicion", ["vindicate","accuse","ridicule","postpone"], "The recording vindicated her account of events."],
+  ["cautious about possible danger", ["wary","weary","reckless","eager"], "Be wary of clearances that sound unusual."],
+  ["showing great energy for a cause", ["zealous","apathetic","courteous","sceptical"], "She is zealous about safety procedures."],
+  ["very skilled at something", ["adept","clumsy","willing","eager"], "He is adept at handling several frequencies at once."],
+  ["shortness of expression", ["brevity","clarity","levity","gravity"], "Radio work rewards brevity above all else."],
+  ["logical and consistent", ["coherent","disjointed","forceful","ambiguous"], "Her account was coherent from start to finish."],
+  ["to discourage someone from acting", ["deter","entice","permit","hasten"], "Higher fines are meant to deter speeding."],
+  ["to draw out a response or reaction", ["elicit","suppress","imply","conceal"], "The interviewer tried to elicit a fuller answer."],
+  ["possible to do without difficulty", ["feasible","hypothetical","mandatory","futile"], "Finishing by Friday is feasible if we start now."],
+  ["fond of company and sociable", ["gregarious","solitary","generous","boisterous"], "Gregarious by nature, he knew everyone in the building."],
+  ["to make something difficult to do", ["hinder","expedite","endorse","tolerate"], "Poor weather hindered the search."],
+  ["certain to happen", ["inevitable","avoidable","unlikely","sudden"], "With that much traffic, delay was inevitable."],
+  ["to put at risk of harm or loss", ["jeopardise","safeguard","evaluate","postpone"], "Cutting corners jeopardises everyone's safety."],
+  ["conforming to the law or the rules", ["legitimate","unlawful","informal","disputed"], "He had a legitimate reason for the absence."],
+  ["to make less severe", ["mitigate","aggravate","prolong","ignore"], "Extra staff mitigated the effect of the closure."],
+  ["so small as to be unimportant", ["negligible","substantial","gradual","doubtful"], "The cost difference is negligible."],
+  ["stubbornly refusing to change", ["obstinate","compliant","hesitant","courteous"], "He was obstinate and refused to reroute."],
+  ["more important than anything else", ["paramount","incidental","temporary","equivalent"], "Safety is paramount, above schedule or cost."],
+  ["to put an end to or suppress", ["quell","provoke","endure","announce"], "The captain quelled the panic with a calm announcement."],
+  ["no longer needed or useful", ["redundant","vital","frequent","concise"], "The old checklist is now redundant."],
+  ["strict, precise and exacting", ["stringent","lenient","vague","flexible"], "Stringent checks apply to every incoming flight."],
+  ["able to be touched; concrete", ["tangible","abstract","fleeting","hidden"], "We need tangible evidence, not impressions."],
+  ["happening at the same time", ["simultaneous","consecutive","sporadic","imminent"], "Two simultaneous emergencies stretched the team."],
+  ["about to happen very soon", ["imminent","distant","optional","gradual"], "With a storm imminent, departures were suspended."],
+  ["occurring at irregular intervals", ["sporadic","constant","rhythmic","punctual"], "Sporadic radio contact made the handover difficult."],
+  ["to make a situation less tense", ["defuse","inflame","confirm","postpone"], "She defused the argument with one calm question."],
+  ["unwilling to spend money", ["frugal","lavish","hasty","genial"], "Frugal habits got him through training on a low wage."],
+  ["a short account of the main points", ["summary","preamble","digression","appendix"], "Read the summary if you have not time for the report."]
+];
+
+// spelling: correct form first, plausible misspelling second (British spellings)
+const SPELLING = [
+  ["accommodate","accomodate"], ["definitely","definately"], ["separate","seperate"],
+  ["occurrence","occurence"], ["necessary","neccessary"], ["privilege","priviledge"],
+  ["embarrass","embarass"], ["liaison","liason"], ["maintenance","maintainance"],
+  ["recommend","reccommend"], ["occasion","ocasion"], ["rhythm","rythm"],
+  ["conscience","concience"], ["questionnaire","questionaire"], ["independent","independant"],
+  ["existence","existance"], ["argument","arguement"], ["calendar","calender"],
+  ["cemetery","cemetary"], ["colleague","collegue"], ["committee","commitee"],
+  ["conscious","concious"], ["deceive","decieve"], ["disappoint","dissapoint"],
+  ["environment","enviroment"], ["exaggerate","exagerate"], ["familiar","familar"],
+  ["foreign","foriegn"], ["government","goverment"], ["harass","harrass"],
+  ["immediately","immediatly"], ["indispensable","indispensible"], ["knowledge","knowlege"],
+  ["leisure","liesure"], ["millennium","millenium"], ["noticeable","noticable"],
+  ["occurred","occured"], ["parallel","paralell"], ["perseverance","perserverance"],
+  ["possession","posession"], ["preferred","prefered"], ["pronunciation","pronounciation"],
+  ["publicly","publically"], ["receive","recieve"], ["referred","refered"],
+  ["restaurant","restaraunt"], ["schedule","schedual"], ["successful","succesful"],
+  ["supersede","supercede"], ["threshold","threshhold"], ["tomorrow","tommorow"],
+  ["until","untill"], ["vacuum","vaccum"], ["weird","wierd"], ["acquire","aquire"],
+  ["apparent","apparant"], ["beginning","begining"], ["believe","beleive"],
+  ["business","buisness"], ["category","catagory"], ["committed","commited"],
+  ["competent","competant"], ["consensus","concensus"], ["discipline","disipline"],
+  ["equipment","equiptment"], ["especially","expecially"], ["February","Febuary"],
+  ["fluorescent","flourescent"], ["gauge","guage"], ["grateful","greatful"],
+  ["guarantee","gaurantee"], ["height","heigth"], ["hierarchy","heirarchy"],
+  ["incidentally","incidently"], ["inoculate","innoculate"], ["intelligence","inteligence"],
+  ["interrupt","interupt"], ["manoeuvre","manouevre"], ["mischievous","mischievious"],
+  ["misspell","mispell"], ["omitted","ommitted"], ["opportunity","oportunity"],
+  ["particularly","particulary"], ["pastime","passtime"], ["perceive","percieve"],
+  ["permanent","permanant"], ["persistent","persistant"], ["personnel","personel"],
+  ["precede","preceed"], ["presence","presance"], ["procedure","proceedure"],
+  ["professor","proffessor"], ["pursue","persue"], ["relevant","relevent"],
+  ["repetition","repitition"], ["resistance","resistence"], ["responsible","responsable"],
+  ["ridiculous","rediculous"], ["secretary","secretery"], ["seize","sieze"],
+  ["sergeant","sargeant"], ["similar","similiar"], ["sincerely","sincerly"],
+  ["souvenir","souveneir"], ["sponsor","sponser"], ["strength","strenght"],
+  ["succeed","suceed"], ["sufficient","sufficent"], ["surprise","suprise"],
+  ["temperature","temperture"], ["tendency","tendancy"], ["thorough","thourough"],
+  ["twelfth","twelth"], ["unnecessary","unecessary"], ["vehicle","vehical"],
+  ["vegetable","vegatable"], ["villain","villian"], ["Wednesday","Wendsday"],
+  ["withhold","withold"], ["writing","writting"], ["yacht","yatch"]
+];
+
+/* ---------- difficulty banding (CEFR: 0=B1, 1=B2, 2=C1, 3=C2) ---------- */
+FLUENCY.forEach((it, i) => it[3] = i < 20 ? 1 : i < 26 ? 1 : 2);
+const VOCAB_LV = [3,3,2,2,2,2,2,2,2,2, 2,1,1,2,2,1,1,1,2,3, 2,3,3,1,2,1,2,2,1,2,
+                  2,2,1,1,2,1,2,2,2,2, 3,1,2,2,1,2,2,2,2,0];
+VOCAB.forEach((it, i) => it[3] = VOCAB_LV[i] !== undefined ? VOCAB_LV[i] : 2);
+SPELLING.forEach(it => it[2] = it[0].length <= 8 ? 1 : it[0].length <= 11 ? 2 : 3);
+
+/* ---------- the confusable pairs candidates lose most marks on ---------- */
+FLUENCY.push(
+  ["The crew were told ___ going to affect the schedule.", ["it's","its","its'","it is'"],
+   "'It's' = it is. 'Its' = belonging to it.", 2],
+  ["___ going to need the updated charts before departure.", ["You're","Your","Yours","You'r"],
+   "'You're' = you are; 'your' shows possession.", 1],
+  ["Make sure you do not ___ your security pass.", ["lose","loose","loosen","loss"],
+   "'Lose' means mislay; 'loose' is the opposite of tight.", 2],
+  ["Can you ___ me on the best course of action?", ["advise","advice","adviced","advize"],
+   "'Advise' is the verb, 'advice' the noun.", 2],
+  ["The two departments handle ___ tasks.", ["discrete","discreet","discreetly","discretion"],
+   "'Discrete' means separate; 'discreet' means tactful.", 3],
+  ["The recording did not ___ any illegal activity.", ["reveal","elicit","illicit","solicit"],
+   "'Illicit' means unlawful; do not confuse it with 'elicit', to draw out.", 3],
+  ["Please ___ that all checklists are completed.", ["ensure","insure","assure","ensured"],
+   "'Ensure' = make certain; 'insure' = buy insurance; 'assure' = reassure a person.", 2],
+  ["From her tone I ___ that she disagreed.", ["inferred","implied","insinuated","imparted"],
+   "The speaker implies; the listener infers.", 3],
+  ["The rain was ___ for the whole afternoon.", ["continuous","continual","continued","continuing"],
+   "'Continuous' is unbroken; 'continual' means repeated with breaks.", 3],
+  ["A judge should be ___ in any dispute.", ["disinterested","uninterested","uninteresting","disinteresting"],
+   "'Disinterested' means impartial; 'uninterested' means bored.", 3],
+  ["The panel ___ four senior controllers.", ["comprises","comprises of","is comprised","composes"],
+   "A whole comprises its parts — never 'comprises of'.", 3],
+  ["___ of the two options is acceptable.", ["Neither","None","Either one of","Both"],
+   "'Neither' is used for two; 'none' for three or more.", 2],
+  ["The difference ___ the two readings was small.", ["between","among","amongst","within"],
+   "'Between' for two things, 'among' for more.", 1],
+  ["___ turn is it to take the next handover?", ["Whose","Who's","Whos","Whom's"],
+   "'Whose' shows possession; 'who's' = who is.", 2],
+  ["Every one of the reports ___ been signed off.", ["has","have","are","were"],
+   "'Every one of' is singular.", 2],
+  ["The data ___ been checked twice.", ["have","has been","is","was"],
+   "In formal writing 'data' takes a plural verb.", 3],
+  ["He is one of those people who ___ always early.", ["are","is","was","has been"],
+   "The verb agrees with 'those people', so 'are'.", 3],
+  ["Had I known earlier, I ___ have rerouted the flight.", ["would","will","had","should had"],
+   "Inverted third conditional: had I known, I would have.", 3],
+  ["The report was written by my colleague and ___.", ["me","I","myself","mine"],
+   "After 'by' you need the object form, 'me'.", 2],
+  ["There are ___ opportunities than there were last year.", ["fewer","less","lesser","fewer amount of"],
+   "'Fewer' for countable nouns like opportunities.", 1]
+);
+
+/* ---------- harder vocabulary, C1 and C2 ---------- */
+VOCAB.push(
+  ["done routinely and with little care or interest", ["perfunctory","thorough","earnest","deliberate"],
+   "He gave the checklist a perfunctory glance and missed the fault.", 3],
+  ["refusing to change one's views or agree", ["intransigent","accommodating","tentative","affable"],
+   "The union remained intransigent throughout the talks.", 3],
+  ["open to more than one interpretation", ["equivocal","explicit","candid","emphatic"],
+   "His equivocal answer satisfied nobody.", 3],
+  ["clear, logical and convincing", ["cogent","muddled","tentative","florid"],
+   "She made a cogent case for extra staffing.", 3],
+  ["most noticeable or important", ["salient","trivial","obscure","dormant"],
+   "Give me the salient points, not the whole report.", 2],
+  ["appearing to be true but perhaps not", ["ostensible","proven","blatant","implicit"],
+   "The ostensible reason was weather; the real one was staffing.", 3],
+  ["false, though appearing genuine", ["spurious","authentic","modest","candid"],
+   "The claim turned out to be spurious.", 3],
+  ["understood without being stated", ["tacit","explicit","verbal","formal"],
+   "There was a tacit agreement to say nothing.", 3],
+  ["not harmful or offensive", ["innocuous","toxic","abrasive","volatile"],
+   "It was an innocuous remark that somehow started an argument.", 2],
+  ["careful to consider the consequences", ["circumspect","impulsive","careless","brash"],
+   "Be circumspect about what you put in writing.", 3],
+  ["likely to fall or fail; insecure", ["precarious","stable","robust","permanent"],
+   "The rota left the night shift in a precarious position.", 2],
+  ["able to recover quickly from difficulty", ["resilient","fragile","rigid","volatile"],
+   "Controllers need to be resilient after a bad shift.", 1],
+  ["likely to be affected by something", ["susceptible","immune","resistant","indifferent"],
+   "New staff are susceptible to fatigue on nights.", 2],
+  ["having mixed feelings about something", ["ambivalent","certain","hostile","enthusiastic"],
+   "She was ambivalent about the promotion.", 2],
+  ["hasty and not thorough", ["cursory","exhaustive","measured","diligent"],
+   "A cursory check will not find a fault like that.", 2],
+  ["relevant to the matter in hand", ["pertinent","irrelevant","obscure","incidental"],
+   "Keep your questions pertinent to the incident.", 2],
+  ["producing a great deal of something", ["prolific","sparse","idle","meagre"],
+   "He was a prolific writer of safety bulletins.", 2],
+  ["basic; at an early stage of development", ["rudimentary","advanced","refined","elaborate"],
+   "My French is rudimentary at best.", 2],
+  ["very careful about doing things correctly", ["scrupulous","careless","hasty","lax"],
+   "She was scrupulous about logging every change.", 2],
+  ["to make a bad situation worse", ["exacerbate","alleviate","resolve","stabilise"],
+   "Closing the second runway exacerbated the delays.", 2],
+  ["not relevant; coming from outside", ["extraneous","essential","central","intrinsic"],
+   "Strip out the extraneous detail before you brief them.", 3],
+  ["pointless, having no useful result", ["futile","fruitful","promising","viable"],
+   "Arguing with the weather is futile.", 2],
+  ["to obstruct or slow the progress of", ["impede","assist","accelerate","enable"],
+   "Poor phrasing on the radio impedes understanding.", 2],
+  ["to calm someone who is angry", ["placate","provoke","ignore","confront"],
+   "He placated the passengers with regular updates.", 2],
+  ["widespread in a particular area or time", ["prevalent","rare","isolated","waning"],
+   "Fatigue is most prevalent on the last night shift.", 2],
+  ["to prevent something from happening", ["preclude","permit","encourage","hasten"],
+   "The fog precluded any visual approach.", 3],
+  ["to support a claim with evidence", ["substantiate","allege","dispute","assume"],
+   "You will need data to substantiate that.", 2],
+  ["briefly and clearly expressed", ["succinct","rambling","vague","ornate"],
+   "Keep the handover succinct.", 2],
+  ["very weak or slight", ["tenuous","robust","firm","substantial"],
+   "The link between the two events is tenuous.", 3],
+  ["likely to change suddenly and unpredictably", ["volatile","steady","predictable","inert"],
+   "Conditions were volatile all afternoon.", 2],
+  ["practical and likely to work", ["viable","hypothetical","doomed","abstract"],
+   "That is the only viable option left.", 1],
+  ["deserving praise", ["laudable","shameful","ordinary","dubious"],
+   "Her handling of the diversion was laudable.", 3]
+);
+
+/* ---------- the spellings people most often get wrong ---------- */
+SPELLING.push(
+  ["accommodation","accomodation",3], ["bureaucracy","beaurocracy",3], ["conscientious","conscientous",3],
+  ["desperate","desparate",1], ["dilemma","dilemna",1], ["embarrassment","embarassment",3],
+  ["harassment","harrassment",2], ["hygiene","hygeine",1], ["irresistible","irresistable",2],
+  ["liaise","liase",1], ["necessarily","neccessarily",2], ["occurring","occuring",2],
+  ["playwright","playwrite",2], ["possess","posess",1], ["receipt","reciept",1],
+  ["reference","referance",2], ["rhyme","rhime",1], ["separately","seperately",2],
+  ["siege","seige",1], ["skilful","skilfull",1], ["successfully","succesfully",3],
+  ["surveillance","surveilance",3], ["tariff","tarrif",1], ["unforeseen","unforseen",2],
+  ["acquaintance","aquaintance",3], ["aggressive","agressive",2], ["amateur","amatuer",1],
+  ["anonymous","anonimous",2], ["apparently","apparantly",2], ["appearance","appearence",2],
+  ["attendance","attendence",2], ["auxiliary","auxillary",2], ["awkward","akward",1],
+  ["bizarre","bizzare",1], ["camouflage","camoflage",2], ["ceiling","cieling",1],
+  ["colonel","colonell",1], ["convenient","convienient",2], ["curiosity","curiousity",2],
+  ["deficient","defficient",1], ["descendant","desendant",2], ["millionaire","millionnaire",2],
+  ["eighth","eigth",1], ["eligible","elegible",1], ["exceed","excede",1],
+  ["forty","fourty",1], ["fulfil","fullfil",1], ["gist","jist",1],
+  ["grievous","grievious",1], ["humorous","humourous",2], ["inadvertently","inadvertantly",3],
+  ["itinerary","itinary",2], ["marriage","marraige",1], ["negotiable","negociable",2],
+  ["obedience","obediance",2], ["occasionally","occassionally",3], ["omission","ommission",1],
+  ["pageant","pagent",1], ["parliament","parliment",2], ["persevere","perservere",2],
+  ["persuade","pursuade",1], ["prejudice","predjudice",2], ["proceed","procede",1],
+  ["broccoli","brocolli",1], ["recede","receed",1], ["reminiscence","reminisence",3],
+  ["renowned","reknowned",1], ["resemblance","resemblence",2], ["sacrilegious","sacreligious",3],
+  ["scissors","sissors",1], ["sensible","sensable",1], ["subtlety","subtlty",1],
+  ["symmetrical","symetrical",2], ["temporarily","temporarilly",3], ["truly","truely",1],
+  ["ubiquitous","ubiquitious",2], ["vengeance","vengance",1], ["visible","visable",1],
+  ["whereas","where as",1], ["wholly","wholely",1]
+);
+
+function spellDiff(right, wrong){
+  let pre = 0;
+  while(pre < right.length && pre < wrong.length && right[pre] === wrong[pre]) pre++;
+  let suf = 0;
+  while(suf < right.length - pre && suf < wrong.length - pre &&
+        right[right.length-1-suf] === wrong[wrong.length-1-suf]) suf++;
+  if(right.length - pre - suf === 0 && pre > 0) pre--;          // always highlight something
+  const midR = right.slice(pre, right.length - suf);
+  const midW = wrong.slice(pre, wrong.length - suf);
+  const html = right.slice(0, pre) + '<b>' + midR + '</b>' + right.slice(right.length - suf);
+  let tip;
+  if(!midW) tip = 'Do not leave the "' + midR + '" out.';
+  else if(!midR) tip = 'There is no "' + midW + '" in it.';
+  else tip = 'It is "' + midR + '" there, not "' + midW + '".';
+  const before = right[pre-1] || '';
+  if(/ie|ei/.test(midR + midW)) tip += ' Remember: i before e, except after c.';
+  else if(midR.length === 2 && midR[0] === midR[1]) tip += ' Doubled letter.';
+  else if(midW.length === 2 && midW[0] === midW[1]) tip += ' Single letter, not doubled.';
+  else if(!midW && midR.length === 1 && before === midR) tip += ' Doubled letter.';
+  return {html, tip};
+}
+
+/* ---------- question flow ---------- */
+let Q = null, t0 = 0, tick = null, answered = false, used = {fluency:[], vocab:[], spelling:[]};
+let runEnd = 0, runTimer = null;
+const stats = {done:0, right:0, times:[], by:{fluency:[0,0], vocab:[0,0], spelling:[0,0]}, missed:[]};
+const allMissed = [];
+let retired = 0;
+const exam = () => $('#exam').checked;
+const LABEL = {fluency:'fluency', vocab:'vocabulary', spelling:'spelling'};
+
+let lvl = 1;                       // 1 = B2, 2 = C1, 3 = C2
+const levelOf = (bank, kind, i) => bank[i][kind === 'spelling' ? 2 : 3];
+const BANDS = {1:'B2', 2:'C1', 3:'C2'};
+
+function nextIndex(bank, kind){
+  const target = Math.max(1, Math.min(3, Math.round(lvl)));
+  let pool = bank.map((_, i) => i)
+    .filter(i => levelOf(bank, kind, i) === target && !used[kind].includes(i));
+  if(!pool.length) pool = bank.map((_, i) => i)
+    .filter(i => Math.abs(levelOf(bank, kind, i) - target) <= 1 && !used[kind].includes(i));
+  if(!pool.length){ used[kind] = []; pool = bank.map((_, i) => i); }
+  const i = pool[R(pool.length)];
+  used[kind].push(i);
+  return i;
+}
+
+function buildItem(kind, i){
+  if(kind === 'spelling'){
+    const [ok, bad] = SPELLING[i];
+    const d = spellDiff(ok, bad);
+    return {kind, idx:i, stem:'Which word is spelled correctly?', options:shuffled([ok,bad]), answer:ok,
+            note:'<b>'+d.html+'</b> is correct. '+d.tip,
+            learn:d.html+' &mdash; '+d.tip};
+  }
+  if(kind === 'vocab'){
+    const [def, words, ex] = VOCAB[i];
+    return {kind, idx:i, stem:'Which word means: <b>'+def+'</b>', options:shuffled(words), answer:words[0],
+            note:'<b>'+words[0]+'</b> means '+def+'. '+ex,
+            learn:'<b>'+words[0]+'</b> = '+def+'. <i>'+ex+'</i>'};
+  }
+  const [sent, words, rule] = FLUENCY[i];
+  const full = sent.replace('___','<b>'+words[0]+'</b>');
+  return {kind, idx:i, stem:sent.replace('___','<span class="gap">&nbsp;</span>'), options:shuffled(words),
+          answer:words[0], note:full+' '+rule,
+          learn:full+'<br><span style="color:var(--muted)">'+rule+'</span>'};
+}
+
+const BANK = {fluency:FLUENCY, vocab:VOCAB, spelling:SPELLING};
+
+function makeQ(){
+  const choice = $('#section').value;
+  if(choice === 'mistakes'){
+    if(!allMissed.length) return null;
+    const m = allMissed[R(allMissed.length)];
+    const q = buildItem(m.kind, m.idx);
+    q.retry = true;
+    return q;
+  }
+  const kind = choice === 'all' ? ['fluency','vocab','spelling'][R(3)] : choice;
+  return buildItem(kind, nextIndex(BANK[kind], kind));
+}
+
+function render(){
+  $('#tag').textContent = LABEL[Q.kind];
+  $('#stem').innerHTML = Q.stem;
+  $('#opts').innerHTML = Q.options.map((o,i) =>
+    '<button data-o="'+i+'">'+o+'<kbd>'+(i+1)+'</kbd></button>').join('');
+  $('#opts').querySelectorAll('button').forEach(b => b.onclick = () => answer(+b.dataset.o));
+  $('#verdict').textContent = ''; $('#verdict').className = 'verdict';
+}
+
+function newQ(){
+  const q = makeQ();
+  if(!q){
+    $('#tag').textContent = 'my mistakes';
+    $('#stem').innerHTML = allMissed.length ? '' : 'Nothing left to practise here.';
+    $('#opts').innerHTML = '';
+    $('#verdict').innerHTML = retired
+      ? '<b>All cleared.</b> You have answered every one of your earlier mistakes correctly. Switch back to All three to keep going.'
+      : 'No mistakes collected yet. Practise a section first and anything you get wrong lands here.';
+    $('#verdict').className = 'verdict right';
+    clearInterval(tick);
+    return;
+  }
+  Q = q; answered = false;
+  render();
+  $('#summary').hidden = true;
+  t0 = performance.now();
+  if(!runEnd){ clearInterval(tick); showClock(); tick = setInterval(showClock, 100); }
+}
+const showClock = () => $('#clock').textContent = ((performance.now()-t0)/1000).toFixed(1)+'s';
+
+function answer(i){
+  if(answered) return;
+  answered = true; clearInterval(tick);
+  const chosen = Q.options[i], ok = chosen === Q.answer;
+  const secs = (performance.now()-t0)/1000;
+  stats.done++; stats.times.push(secs);
+  stats.by[Q.kind][1]++;
+  if(ok){
+    stats.right++; stats.by[Q.kind][0]++;
+    if(!Q.retry) lvl = Math.min(3, lvl + 0.34);
+    if(Q.retry){
+      const at = allMissed.findIndex(m => m.kind === Q.kind && m.idx === Q.idx);
+      if(at >= 0) allMissed.splice(at, 1);
+      retired++;
+    }
+  }
+  else {
+    if(!Q.retry) lvl = Math.max(1, lvl - 0.5);
+    const miss = {kind:Q.kind, idx:Q.idx, right:Q.answer, chosen, learn:Q.learn};
+    stats.missed.push(miss);
+    if(!allMissed.some(m => m.kind === miss.kind && m.idx === miss.idx)) allMissed.push(miss);
+  }
+  updateStats();
+
+  if(exam()){ setTimeout(() => { if($('#summary').hidden) newQ(); }, 90); return; }
+
+  $('#opts').querySelectorAll('button').forEach(b => {
+    const j = +b.dataset.o;
+    b.disabled = true;
+    if(Q.options[j] === Q.answer) b.classList.add('good');
+    else if(j === i) b.classList.add('bad');
+  });
+  $('#verdict').innerHTML = (ok ? '<b>Correct.</b> ' : '<b>Not quite.</b> ') + Q.note +
+    (Q.retry && ok ? ' <span style="color:var(--good)">Retired — '+allMissed.length+' left.</span>' : '') +
+    (Q.retry && !ok ? ' <span style="color:var(--muted)">Staying on the list.</span>' : '');
+  $('#verdict').className = 'verdict ' + (ok ? 'right' : 'wrong');
+  setTimeout(() => { if($('#summary').hidden && answered) newQ(); }, ok ? 1200 : 3000);
+}
+
+function reviewHTML(list){
+  let out = '';
+  for(const k of ['fluency','vocab','spelling']){
+    const items = list.filter(m => m.kind === k);
+    if(!items.length) continue;
+    out += '<h2>'+LABEL[k]+' \u2014 '+items.length+' to learn</h2><ul class="missed">' +
+      items.map(m => '<li>'+m.learn+
+        '<br><span style="color:var(--bad)">you chose &ldquo;'+m.chosen+'&rdquo;</span></li>').join('') +
+      '</ul>';
+  }
+  return out;
+}
+
+function updateStats(){
+  $('#review').textContent = allMissed.length
+    ? 'Review my mistakes (' + allMissed.length + ')' : 'Review my mistakes';
+  $('#s-done').textContent = stats.done;
+  $('#s-acc').textContent = stats.done ? Math.round(100*stats.right/stats.done)+'%' : '—';
+  const t = stats.times;
+  $('#s-rate').textContent = t.length ? (t.reduce((a,b)=>a+b,0)/t.length).toFixed(1)+'s' : '—';
+  let worst = '—', worstPct = 2;
+  for(const k of ['fluency','vocab','spelling']){
+    const [r,n] = stats.by[k];
+    if(n >= 3 && r/n < worstPct){ worstPct = r/n; worst = LABEL[k]; }
+  }
+  $('#s-weak').style.fontSize = '15px';
+  $('#s-weak').textContent = worst;
+}
+
+$('#skip').onclick = newQ;
+
+$('#review').onclick = () => {
+  clearInterval(tick);
+  if(!allMissed.length){
+    $('#verdict').innerHTML = '<b>Nothing to review yet</b> — answer a few and anything you get wrong is collected here.';
+    $('#verdict').className = 'verdict';
+    return;
+  }
+  $('#summary').innerHTML =
+    '<h3>Everything you have got wrong so far</h3>' +
+    '<p class="pace">'+allMissed.length+' item'+(allMissed.length===1?'':'s')+
+    ' across this session, with the correct answer and why.</p>' +
+    reviewHTML(allMissed) +
+    '<button class="btn primary" id="back">Back to practice</button> ' +
+    '<button class="btn" id="clearm">Clear the list</button>';
+  $('#summary').hidden = false;
+  $('#back').onclick = () => newQ();
+  $('#clearm').onclick = () => { allMissed.length = 0; updateStats(); newQ(); };
+};
+$('#section').onchange = newQ;
+$('#exam').onchange = newQ;
+document.addEventListener('keydown', e => {
+  if(e.key >= '1' && e.key <= '4'){ const i = +e.key - 1; if(Q && i < Q.options.length) answer(i); }
+  if(e.key === 'Enter' && answered && !runEnd) newQ();
+});
+$('#run').onclick = () => {
+  if(runEnd){ endRun(); return; }
+  stats.done = 0; stats.right = 0; stats.times = []; stats.missed = [];
+  stats.by = {fluency:[0,0], vocab:[0,0], spelling:[0,0]};
+  updateStats();
+  lvl = 1;
+  runEnd = performance.now() + 10*60*1000;
+  $('#run').textContent = 'Stop run';
+  clearInterval(tick);
+  runTimer = setInterval(() => {
+    const left = Math.max(0, runEnd - performance.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#clock').textContent = m+':'+String(s).padStart(2,'0');
+    $('#clock').classList.toggle('low', left < 60000);
+    if(left <= 0) endRun();
+  }, 200);
+  newQ();
+};
+
+function endRun(){
+  clearInterval(runTimer); runEnd = 0; answered = true;
+  $('#run').textContent = 'Start 10-minute run';
+  $('#clock').textContent = '0:00'; $('#clock').classList.remove('low');
+  const acc = stats.done ? Math.round(100*stats.right/stats.done) : 0;
+  const t = stats.times, avg = t.length ? t.reduce((a,b)=>a+b,0)/t.length : 0;
+  const part = k => { const [r,n] = stats.by[k]; return n ? Math.round(100*r/n)+'%' : '—'; };
+
+  let note;
+  if(!stats.done) note = 'Nothing answered.';
+  else if(avg > 15) note = 'At '+avg.toFixed(1)+'s an item you are reading too slowly for a ten-minute test. Decide within about ten seconds and move on.';
+  else if(acc < 70) note = 'Accuracy of '+acc+'% with '+avg.toFixed(1)+'s per item — you are answering faster than you are reading. Slow down slightly; wrong answers may carry a penalty.';
+  else note = acc+'% at '+avg.toFixed(1)+'s an item, roughly '+Math.round(600/avg)+' items in ten minutes. Good balance.';
+
+  let review = reviewHTML(stats.missed);
+  if(!review && stats.done) review = '<p class="pace">Nothing wrong to review — everything correct.</p>';
+
+  const band = BANDS[Math.max(1, Math.min(3, Math.round(lvl)))];
+  $('#summary').innerHTML =
+    '<h3>Ten-minute run</h3>' +
+    '<div class="scores">' +
+      '<div><b class="ok">'+stats.right+'</b><span>correct</span></div>' +
+      '<div><b class="no">'+(stats.done-stats.right)+'</b><span>wrong</span></div>' +
+      '<div><b>'+(stats.done?acc+'%':'—')+'</b><span>accuracy</span></div>' +
+      '<div><b>'+part('fluency')+'</b><span>fluency</span></div>' +
+      '<div><b>'+part('vocab')+'</b><span>vocabulary</span></div>' +
+      '<div><b>'+part('spelling')+'</b><span>spelling</span></div>' +
+      '<div><b>'+band+'</b><span>level reached</span></div>' +
+    '</div>' +
+    '<p class="pace">'+note+'</p>' +
+    review +
+    '<button class="btn primary" id="again">Run again</button> ' +
+    '<button class="btn" id="free">Untimed practice</button>';
+  $('#summary').hidden = false;
+  $('#again').onclick = () => $('#run').click();
+  $('#free').onclick = () => newQ();
+}
+
+newQ();
+</script>
+<script src="briefs.js" defer></script>
+<script src="shell.js" defer></script>
+</html>

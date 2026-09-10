@@ -1,0 +1,124 @@
+.vwm__phase {
+  margin: 0; color: var(--ink-muted); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.vwm__level { font: var(--step--1) var(--mono); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.vwm__idle { margin: 0; color: var(--ink-muted); }
+
+/* Fixed footprint: the grid must not resize between phases, or the route the
+   candidate encoded no longer maps onto what comes back. */
+.vwm__matrix {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  gap: var(--space-2);
+  width: min(100%, 420px);
+  aspect-ratio: 1;
+}
+.vwm__cell {
+  aspect-ratio: 1; min-height: 0; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-sunken); color: var(--ink);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.vwm__cell[disabled] { cursor: default; }
+.vwm__cell:not([disabled]) { cursor: pointer; }
+.vwm__cell:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface-sunken));
+  border-color: var(--ink-muted);
+}
+/* The presented location. Identical treatment for every cell, so nothing about
+   an earlier location survives into the next one. */
+.vwm__cell.is-lit { background: var(--accent); border-color: var(--accent); }
+.vwm__cell.is-chosen { background: color-mix(in srgb, var(--accent) 28%, var(--surface)); border-color: var(--accent); }
+/* Review states carry a number and a border weight, never colour alone. */
+.vwm__cell.is-hit { background: color-mix(in srgb, var(--good) 26%, var(--surface)); border: 2px solid var(--good); }
+.vwm__cell.is-wrong { background: color-mix(in srgb, var(--bad) 18%, var(--surface)); border: 2px solid var(--bad); }
+.vwm__cell.is-missed { border: 2px dashed var(--good); }
+.vwm__ord { font: 600 var(--step-0) var(--mono); font-variant-numeric: tabular-nums; }
+
+/* The interposed judgement, in its own block well away from the grid. */
+.vwm__judge { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
+.vwm__judge-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
+.vwm__sym {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  width: min(100%, 240px); aspect-ratio: 1;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.vwm__sym span { background: var(--surface); }
+.vwm__sym span.is-on { background: var(--ink); }
+
+.vwm__row { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: center; }
+
+.vwm__actions, .vwm__result {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
+  width: 100%;
+}
+.vwm__count { font: var(--step--1) var(--mono); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+.vwm__figures {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  margin: 0; width: 100%; max-width: 520px;
+}
+.vwm__figures > div { display: flex; flex-direction: column; margin: 0; }
+.vwm__figures dt { order: 2; font-size: var(--step--1); color: var(--ink-muted); }
+.vwm__figures dd {
+  order: 1; margin: 0;
+  font: 600 1.4rem/1.15 var(--mono); font-variant-numeric: tabular-nums;
+}
+.vwm__figures .is-bad { color: var(--bad); }
+
+/* The interposed task sits in its own strip, well away from the test area, so
+   nothing about it can be read as information about the circles. */
+.vwm__distraction { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
+.vwm__prompt { margin: 0; font-size: var(--step-1); }
+.vwm__shapes { display: flex; gap: var(--space-4); flex-wrap: wrap; justify-content: center; }
+.vwm__shape {
+  width: 56px; height: 56px; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-sunken);
+  position: relative;
+  transition: border-color 120ms ease;
+}
+.vwm__shape:hover { border-color: var(--ink-muted); }
+.vwm__shape::after {
+  content: ''; position: absolute; inset: 12px; background: currentColor;
+}
+.vwm__shape--circle::after { border-radius: 50%; }
+.vwm__shape--square::after { border-radius: 2px; }
+.vwm__shape--triangle::after { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+/* Fixed hues: these are the task's own vocabulary, not theme chrome. */
+.vwm__shape--red { color: #d2453a; }
+.vwm__shape--green { color: #2f8f4e; }
+.vwm__shape--blue { color: #2f6fb5; }
+.vwm__shape--yellow { color: #d8a01c; }
+
+.vwm__table {
+  border-collapse: collapse; margin: 0 0 var(--space-4);
+  font: var(--step--1) var(--mono); font-variant-numeric: tabular-nums;
+}
+.vwm__table caption {
+  text-align: left; font-family: var(--font); color: var(--ink-muted);
+  font-size: var(--step--1); margin-bottom: var(--space-2);
+}
+.vwm__table th, .vwm__table td {
+  padding: var(--space-1) var(--space-3); text-align: right; border-bottom: 1px solid var(--line);
+}
+.vwm__table thead th { color: var(--ink-muted); font-weight: 500; }
+.vwm__table tbody th { text-align: left; }
+
+/* Time remaining on a judgement. Width is set from state rather than a CSS
+   animation, so the reduced-motion rule cannot silently blank it. */
+.vwm__deadline {
+  width: min(100%, 240px); height: 6px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); overflow: hidden;
+}
+.vwm__deadline span {
+  display: block; height: 100%;
+  background: var(--accent);
+  transition: width 80ms linear;
+}
+.vwm__deadline.is-low span { background: var(--bad); }

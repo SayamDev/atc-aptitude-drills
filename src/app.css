@@ -1,0 +1,84 @@
+.home__head { margin-bottom: var(--space-6); }
+.home__lede { font-size: var(--step-1); color: var(--ink-muted); }
+
+.home__family { margin-bottom: var(--space-6); }
+.home__family-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4);
+  padding-bottom: var(--space-2); margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.home__family-head h2 {
+  margin: 0; font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink); white-space: nowrap;
+}
+.home__family-head p {
+  margin: 0; flex: 1 1 22rem; font-size: var(--step--1); color: var(--ink-muted); max-width: 62ch;
+}
+
+.cards {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+}
+
+.card {
+  position: relative;
+  padding: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  transition: border-color 120ms ease;
+}
+.card:hover { border-color: var(--accent); }
+/* The whole card is the target, but the drill name stays the accessible name. */
+.card__link::after { content: ''; position: absolute; inset: 0; }
+/* Glyph and name share a baseline row; the glyph never shrinks, so names of
+   different lengths do not shift it. */
+.card__head { display: flex; align-items: center; gap: var(--space-3); }
+.glyph { flex: 0 0 auto; color: var(--ink-muted); transition: color 120ms ease; }
+.card:hover .glyph { color: var(--accent); }
+.card__name { margin: 0; font-size: var(--step-1); }
+.card__link { color: var(--ink); text-decoration: none; }
+.card:hover .card__link { color: var(--accent); }
+.card__link:focus-visible { outline: none; }
+.card:has(.card__link:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.card__meta {
+  margin: 0; display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--step--1); color: var(--ink-muted);
+}
+/* Eleven solid accent blocks shouted over the drill names they were labelling.
+   A tint carries the same grouping at a fraction of the weight, and still clears
+   AA: 5.6:1 light, 5.7:1 dark. */
+.card__code {
+  font: var(--step--1) var(--mono);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  padding: 2px var(--space-2); border-radius: var(--radius);
+}
+.card__measures { margin: 0; font-size: var(--step--1); color: var(--ink-muted); flex: 1; }
+
+/* The run figures turn the index into a progress board, so they get the
+   tabular treatment the drills themselves use. */
+.card__last {
+  margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap;
+  font-size: var(--step--1);
+}
+.card__figure { font: 600 var(--step-0) var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.card__when { color: var(--ink-muted); margin-left: auto; }
+.card__last--none { color: var(--ink-muted); font-style: italic; }
+
+.home__note { padding: var(--space-4); }
+.home__clear { margin: 0; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-3);
+}
+.crumb { font-size: var(--step--1); }
+
+.home__actions { margin: var(--space-4) 0 0; }
+/* A link that acts as a button still needs the 44px target. */
+.home__actions .btn {
+  display: inline-flex; align-items: center; text-decoration: none;
+  color: var(--ink); padding-block: 0;
+}
+.home__actions .btn:hover { border-color: var(--accent); color: var(--accent); }
