@@ -112,7 +112,7 @@ npm install
 npm run dev
 ```
 
-Then open the address it prints. Node 18 or newer. `npm test` runs the test suite,
+Then open the address it prints. Node 20 or newer. `npm test` runs the test suite,
 `npm run build` produces the static site.
 
 ## For developers
