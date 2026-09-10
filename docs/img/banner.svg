@@ -20,12 +20,12 @@
       <text x="16" y="46" fill="#a3b0bb" font-size="13">unit tests</text>
     </g>
     <g transform="translate(296,0)">
-      <rect x="0" y="0" width="160" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+      <rect x="0" y="0" width="168" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
       <text x="16" y="27" fill="#e8edf2" font-size="21" font-weight="700">WCAG 2.2 AA</text>
       <text x="16" y="46" fill="#a3b0bb" font-size="13">accessibility target</text>
     </g>
-    <g transform="translate(472,0)">
-      <rect x="0" y="0" width="182" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
+    <g transform="translate(480,0)">
+      <rect x="0" y="0" width="212" height="58" rx="5" fill="#1b2229" stroke="#38424c"/>
       <text x="16" y="27" fill="#6cc48a" font-size="21" font-weight="700">Nothing uploaded</text>
       <text x="16" y="46" fill="#a3b0bb" font-size="13">runs entirely in the browser</text>
     </g>
