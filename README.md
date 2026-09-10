@@ -18,7 +18,7 @@ through, and most people meet the format for the first time on the day itself.
 
 Practice material for those tests is almost all behind a paywall, and a lot of it is sold on a
 false promise — that it contains "the real questions". It does not. The real items are generated
-fresh each time nobody publishes them.
+fresh for every candidate, and no one publishes them.
 
 What *can* legitimately be practised is the **format**, the **method**, and the **pacing**. That
 is what this is.
